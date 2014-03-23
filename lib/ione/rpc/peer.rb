@@ -13,7 +13,12 @@ module Ione
         @port = @connection.port
         @protocol = protocol
         @buffer = Ione::ByteBuffer.new
+        @closed_promise = Promise.new
         @current_message = nil
+      end
+
+      def on_closed(&listener)
+        @closed_promise.future.on_value(&listener)
       end
 
       protected
@@ -31,7 +36,8 @@ module Ione
       def handle_message(message, channel)
       end
 
-      def handle_closed(cause)
+      def handle_closed(cause=nil)
+        @closed_promise.fulfill(cause)
       end
 
       def send_message(message, channel)

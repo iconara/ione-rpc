@@ -13,10 +13,6 @@ module Ione
         @queue = []
       end
 
-      def on_closed(&listener)
-        @closed_listener = listener
-      end
-
       def send_request(request)
         promise = Ione::Promise.new
         channel = @lock.synchronize do
@@ -72,7 +68,7 @@ module Ione
         error = Io::ConnectionClosedError.new('Connection closed')
         promises_to_fail = @lock.synchronize { @channels.reject(&:nil?) }
         promises_to_fail.each { |p| p.fail(error) }
-        @closed_listener.call(cause) if @closed_listener
+        super
       end
     end
   end

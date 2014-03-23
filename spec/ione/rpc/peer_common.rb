@@ -88,6 +88,25 @@ shared_examples 'peers' do
       connection.written_bytes.should == Ione::ByteBuffer.new('FUZZBAZZ@9')
     end
   end
+
+  context 'when the connection closes' do
+    it 'calls the closed listeners' do
+      called1 = false
+      called2 = false
+      peer.on_closed { called1 = true }
+      peer.on_closed { called2 = true }
+      connection.closed_listener.call
+      called1.should be_true
+      called2.should be_true
+    end
+
+    it 'calls the closed listener with the close cause' do
+      cause = nil
+      peer.on_closed { |e| cause = e }
+      connection.closed_listener.call(StandardError.new('foo'))
+      cause.should == StandardError.new('foo')
+    end
+  end
 end
 
 module RpcSpec
