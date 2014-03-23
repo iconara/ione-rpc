@@ -44,9 +44,7 @@ module Ione
 
     class ServerPeer < Peer; end
 
-    class ClientPeer < Peer; end
-
-    class MultiChannelClientPeer < ClientPeer
+    class ClientPeer < Peer
       def initialize(connection, protocol, max_channels)
         super(connection, protocol)
         @lock = Mutex.new
