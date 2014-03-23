@@ -11,3 +11,4 @@ end
 require 'ione/rpc/peer'
 require 'ione/rpc/server_peer'
 require 'ione/rpc/client_peer'
+require 'ione/rpc/server'
