@@ -11,6 +11,14 @@ module Ione
         RpcSpec::TestServerPeer.new(connection, protocol)
       end
 
+      let :connection do
+        RpcSpec::FakeConnection.new
+      end
+
+      let :protocol do
+        double(:protocol)
+      end
+
       include_examples 'peers'
     end
   end

@@ -36,7 +36,9 @@ module Ione
           @channels[channel] = nil
           promise
         end
-        promise.fulfill(response)
+        if promise
+          promise.fulfill(response)
+        end
         flush_queue
       end
 

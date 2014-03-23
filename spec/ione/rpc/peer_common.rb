@@ -4,14 +4,6 @@ require 'spec_helper'
 
 
 shared_examples 'peers' do
-  let :connection do
-    RpcSpec::FakeConnection.new
-  end
-
-  let :protocol do
-    double(:protocol)
-  end
-
   context 'when setting up' do
     it 'registers itself to receive notifications when there is new data' do
       connection.data_listener.should_not be_nil
