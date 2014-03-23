@@ -6,9 +6,9 @@ require 'ione/rpc/peer_common'
 
 module Ione
   module Rpc
-    describe Peer do
+    describe ClientPeer do
       let! :peer do
-        RpcSpec::TestPeer.new(connection, protocol)
+        RpcSpec::TestClientPeer.new(connection, protocol, 8)
       end
 
       include_examples 'peers'
@@ -17,7 +17,7 @@ module Ione
 end
 
 module RpcSpec
-  class TestPeer < Ione::Rpc::Peer
+  class TestClientPeer < Ione::Rpc::ClientPeer
     attr_reader :messages
 
     def initialize(*)
