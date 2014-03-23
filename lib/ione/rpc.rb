@@ -24,9 +24,9 @@ module Ione
       def handle_data(new_data)
         @buffer << new_data
         while true
-          message, channel = @protocol.decode(@buffer, @current_message)
-          break if message.partial?
-          handle_message(message, channel)
+          @current_message, channel = @protocol.decode(@buffer, @current_message)
+          break if @current_message.partial?
+          handle_message(@current_message, channel)
           @current_message = nil
         end
       end
