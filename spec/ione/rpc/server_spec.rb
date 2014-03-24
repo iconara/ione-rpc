@@ -7,11 +7,7 @@ module Ione
   module Rpc
     describe Server do
       let :server do
-        described_class.new(server_handler_factory, 4321, io_reactor: io_reactor)
-      end
-
-      let :server_handler_factory do
-        double(:server_handler_factory)
+        ServerSpec::TestServer.new(4321, io_reactor: io_reactor)
       end
 
       let :io_reactor do
@@ -20,10 +16,6 @@ module Ione
         r.stub(:stop).and_return(Ione::Future.resolved(r))
         r.stub(:bind).and_return(Ione::Future.resolved)
         r
-      end
-
-      before do
-        server_handler_factory.stub(:call)
       end
 
       describe '#port' do
@@ -44,13 +36,13 @@ module Ione
         end
 
         it 'starts a server that binds to the specified address' do
-          server = described_class.new(server_handler_factory, 4321, io_reactor: io_reactor, bind_address: '1.1.1.1')
+          server = described_class.new(4321, io_reactor: io_reactor, bind_address: '1.1.1.1')
           server.start.value
           io_reactor.should have_received(:bind).with('1.1.1.1', 4321, anything)
         end
 
         it 'uses the specified queue size' do
-          server = described_class.new(server_handler_factory, 4321, io_reactor: io_reactor, queue_size: 11)
+          server = described_class.new(4321, io_reactor: io_reactor, queue_size: 11)
           server.start.value
           io_reactor.should have_received(:bind).with(anything, anything, 11)
         end
@@ -91,9 +83,32 @@ module Ione
           connection = double(:connection).as_null_object
           server.start.value
           handler = accept_listeners.first.call(connection)
-          server_handler_factory.should have_received(:call).with(connection)
+          server.created_connections.first.raw_connection.should == connection
         end
       end
+    end
+  end
+end
+
+module ServerSpec
+  class TestServer < Ione::Rpc::Server
+    attr_reader :created_connections
+
+    def initialize(*)
+      super
+      @created_connections = []
+    end
+
+    def create_connection(connection)
+      @created_connections << connection
+    end
+  end
+
+  class TestConnection
+    attr_reader :raw_connection
+
+    def initialize(connection)
+      @raw_connection = connection
     end
   end
 end

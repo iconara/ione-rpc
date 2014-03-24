@@ -5,9 +5,8 @@ module Ione
     class Server
       attr_reader :port
 
-      def initialize(server_handler_factory, port, options={})
+      def initialize(port, options={})
         @port = port
-        @server_handler_factory = server_handler_factory
         @io_reactor = options[:io_reactor] || Io::IoReactor.new
         @stop_reactor = !options[:io_reactor]
         @queue_length = options[:queue_size] || 5
@@ -22,12 +21,18 @@ module Ione
         @io_reactor.stop.map(self)
       end
 
+      protected
+
+      def create_connection(connection)
+        raise NotImplementedError, %(Server#create_connection not implemented)
+      end
+
       private
 
       def setup_server
         @io_reactor.bind(@bind_address, @port, @queue_length) do |acceptor|
           acceptor.on_accept do |connection|
-            @server_handler_factory.call(connection)
+            create_connection(connection)
           end
         end
       end
