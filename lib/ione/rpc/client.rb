@@ -3,8 +3,7 @@
 module Ione
   module Rpc
     class Client
-      def initialize(client_handler_factory, hosts, options={})
-        @client_handler_factory = client_handler_factory
+      def initialize(hosts, options={})
         @hosts = hosts
         @lock = Mutex.new
         @routing_strategy = options[:routing_strategy] || RandomRoutingStrategy.new
@@ -50,6 +49,16 @@ module Ione
         end
       end
 
+      protected
+
+      def create_connection(connection)
+        raise NotImplementedError, %(Client#create_connection not implemented)
+      end
+
+      def initialize_connection(connection)
+        Future.resolved
+      end
+
       private
 
       class RandomRoutingStrategy
@@ -71,7 +80,7 @@ module Ione
         if @io_reactor.running?
           @logger.debug('Connecting to %s:%d' % [host, port]) if @logger
           f = @io_reactor.connect(host, port, @connection_timeout) do |connection|
-            @client_handler_factory.call(connection)
+            create_connection(connection)
           end
           f.on_value(&method(:handle_connected))
           f = f.fallback do |e|
@@ -82,12 +91,8 @@ module Ione
             ff = @io_reactor.schedule_timer(timeout)
             ff.flat_map { connect(host, port, next_timeout) }
           end
-          if @connection_initializer
-            f.flat_map do |connection|
-              @connection_initializer.call(connection)
-            end
-          else
-            f
+          f.flat_map do |connection|
+            initialize_connection(connection)
           end
         else
           Future.failed(Io::ConnectionError.new('IO reactor stopped while connecting to %s:%d' % [host, port]))

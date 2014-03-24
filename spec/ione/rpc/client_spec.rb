@@ -7,11 +7,7 @@ module Ione
   module Rpc
     describe Client do
       let :client do
-        described_class.new(client_handler_factory, %w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], io_reactor: io_reactor, logger: logger, connection_timeout: 7)
-      end
-
-      let :client_handler_factory do
-        double(:client_handler_factory)
+        ClientSpec::TestClient.new(%w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], io_reactor: io_reactor, logger: logger, connection_timeout: 7)
       end
 
       let :io_reactor do
@@ -25,8 +21,8 @@ module Ione
           r.stub(:running?).and_return(false)
           Future.resolved(r)
         end
-        r.stub(:connect) do |h, port, _, &block|
-          Future.resolved(block.call(connections[h]))
+        r.stub(:connect) do |host, port, _, &block|
+          Future.resolved(block.call(create_raw_connection(host, port)))
         end
         r
       end
@@ -35,34 +31,11 @@ module Ione
         double(:logger, warn: nil, info: nil, debug: nil)
       end
 
-      let :connections do
-        {
-          'node0.example.com' => double(:connection0),
-          'node1.example.com' => double(:connection1),
-          'node2.example.com' => double(:connection2),
-        }
-      end
-
-      let :handlers do
-        {
-          'node0.example.com' => double(:handler0, host: 'node0.example.com', port: '4321'),
-          'node1.example.com' => double(:handler1, host: 'node1.example.com', port: '5432'),
-          'node2.example.com' => double(:handler2, host: 'node2.example.com', port: '6543'),
-        }
-      end
-
-      before do
-        client_handler_factory.stub(:call) do |connection|
-          handlers.values[connections.values.index(connection)]
-        end
-      end
-
-      before do
-        handlers.each_value do |handler|
-          handler.stub(:on_closed) do |&listener|
-            handler.stub(:closed_listener).and_return(listener)
-          end
-        end
+      def create_raw_connection(host, port)
+        connection = double("connection@#{host}:#{port}")
+        connection.stub(:host).and_return(host)
+        connection.stub(:port).and_return(port)
+        connection
       end
 
       describe '#start' do
@@ -84,9 +57,8 @@ module Ione
 
         it 'creates a protocol handler for each connection' do
           client.start.value
-          client_handler_factory.should have_received(:call).with(connections.values[0])
-          client_handler_factory.should have_received(:call).with(connections.values[1])
-          client_handler_factory.should have_received(:call).with(connections.values[2])
+          client.created_connections.map(&:host).should == %w[node0.example.com node1.example.com node2.example.com]
+          client.created_connections.map(&:port).should == [4321, 5432, 6543]
         end
 
         it 'logs when the connection succeeds' do
@@ -100,15 +72,15 @@ module Ione
           connection_attempts = 0
           attempts_by_host = Hash.new(0)
           io_reactor.stub(:schedule_timer).and_return(Future.resolved)
-          io_reactor.stub(:connect) do |host, _, _, &block|
+          io_reactor.stub(:connect) do |host, port, _, &block|
             if host == 'node1.example.com'
-              Future.resolved(block.call(connections[host]))
+              Future.resolved(block.call(create_raw_connection(host, port)))
             else
               attempts_by_host[host] += 1
               if attempts_by_host[host] < 10
                 Future.failed(StandardError.new('BORK'))
               else
-                Future.resolved(block.call(connections[host]))
+                Future.resolved(block.call(create_raw_connection(host, port)))
               end
             end
           end
@@ -125,16 +97,16 @@ module Ione
             timeouts << n
             Future.resolved
           end
-          io_reactor.stub(:connect) do |host, _, _, &block|
+          io_reactor.stub(:connect) do |host, port, _, &block|
             if host == 'node1.example.com'
               connection_attempts += 1
               if connection_attempts < 10
                 Future.failed(StandardError.new('BORK'))
               else
-                Future.resolved(block.call(connections[host]))
+                Future.resolved(block.call(create_raw_connection(host, port)))
               end
             else
-              Future.resolved(block.call(connections[host]))
+              Future.resolved(block.call(create_raw_connection(host, port)))
             end
           end
           client.start.value
@@ -159,16 +131,16 @@ module Ione
         it 'logs each connection attempt and failure' do
           connection_attempts = 0
           io_reactor.stub(:schedule_timer).and_return(Future.resolved)
-          io_reactor.stub(:connect) do |host, _, _, &block|
+          io_reactor.stub(:connect) do |host, port, _, &block|
             if host == 'node1.example.com'
               connection_attempts += 1
               if connection_attempts < 3
                 Future.failed(StandardError.new('BORK'))
               else
-                Future.resolved(block.call(connections[host]))
+                Future.resolved(block.call(create_raw_connection(host, port)))
               end
             else
-              Future.resolved(block.call(connections[host]))
+              Future.resolved(block.call(create_raw_connection(host, port)))
             end
           end
           client.start.value
@@ -178,24 +150,14 @@ module Ione
           logger.should have_received(:warn).with(/failed connecting to node1\.example\.com:5432, will try again in \d+s/i).exactly(2).times
         end
 
-        context 'with a connection initializer' do
-          let :client do
-            described_class.new(client_handler_factory, %w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], io_reactor: io_reactor, logger: logger, connection_timeout: 7, connection_initializer: connection_initializer)
+        it 'calls the connection initializer implementation after the connection has been established' do
+          initialized = []
+          client.connection_initializer = lambda do |connection|
+            initialized << connection
+            Future.resolved
           end
-
-          let :connection_initializer do
-            double(:connection_initializer)
-          end
-
-          it 'calls the connection initializer after the connection has been established' do
-            initialized = []
-            connection_initializer.stub(:call) do |connection|
-              initialized << connection
-              Future.resolved
-            end
-            client.start.value
-            initialized.should == handlers.values
-          end
+          client.start.value
+          initialized.should == client.created_connections
         end
       end
 
@@ -212,13 +174,10 @@ module Ione
 
       describe '#send_request' do
         before do
-          handlers.each_value do |handler|
-            handler.stub(:send_request).with('PING').and_return(Future.resolved('PONG'))
-          end
-        end
-
-        before do
           client.start.value
+          client.created_connections.each do |connection|
+            connection.stub(:send_request).with('PING').and_return(Future.resolved('PONG'))
+          end
         end
 
         it 'returns a future that resolves to the response from the server' do
@@ -251,7 +210,7 @@ module Ione
           client.start.value
           io_reactor.stub(:schedule_timer).and_return(Future.resolved)
           io_reactor.stub(:connect).and_return(Future.failed(StandardError.new('BORK')))
-          handlers.each_value { |handler| handler.closed_listener.call }
+          client.created_connections.each { |connection| connection.closed_listener.call }
           client.should_not be_connected
         end
       end
@@ -259,34 +218,34 @@ module Ione
       context 'when disconnected' do
         it 'logs that the connection closed' do
           client.start.value
-          handlers['node1.example.com'].closed_listener.call
+          client.created_connections.find { |c| c.host == 'node1.example.com' }.closed_listener.call
           logger.should have_received(:info).with(/connection to node1\.example\.com:5432 closed/i)
           logger.should_not have_received(:info).with(/node0\.example\.com closed/i)
         end
 
         it 'logs that the connection closed unexpectedly' do
           client.start.value
-          handlers['node1.example.com'].closed_listener.call(StandardError.new('BORK'))
+          client.created_connections.find { |c| c.host == 'node1.example.com' }.closed_listener.call(StandardError.new('BORK'))
           logger.should have_received(:warn).with(/connection to node1\.example\.com:5432 closed unexpectedly: BORK/i)
           logger.should_not have_received(:warn).with(/node0\.example\.com/i)
         end
 
         it 'logs when requests fail' do
           client.start.value
-          handlers.each_value { |handler| handler.stub(:send_request).with('PING').and_return(Future.failed(StandardError.new('BORK'))) }
+          client.created_connections.each { |connection| connection.stub(:send_request).with('PING').and_return(Future.failed(StandardError.new('BORK'))) }
           client.send_request('PING')
           logger.should have_received(:warn).with(/request failed: BORK/i)
         end
 
         it 'attempts to reconnect' do
           client.start.value
-          handlers['node1.example.com'].closed_listener.call(StandardError.new('BORK'))
+          client.created_connections.find { |c| c.host == 'node1.example.com' }.closed_listener.call(StandardError.new('BORK'))
           io_reactor.should have_received(:connect).exactly(4).times
         end
 
         it 'does not attempt to reconnect on a clean close' do
           client.start.value
-          handlers['node1.example.com'].closed_listener.call
+          client.created_connections.find { |c| c.host == 'node1.example.com' }.closed_listener.call
           io_reactor.should have_received(:connect).exactly(3).times
         end
 
@@ -294,21 +253,21 @@ module Ione
           connection_attempts = 0
           connection_attempts_by_host = Hash.new(0)
           io_reactor.stub(:schedule_timer).and_return(Future.resolved)
-          io_reactor.stub(:connect) do |host, _, _, &block|
+          io_reactor.stub(:connect) do |host, port, _, &block|
             connection_attempts_by_host[host] += 1
             if host == 'node1.example.com'
               connection_attempts += 1
               if connection_attempts > 1 && connection_attempts < 10
                 Future.failed(StandardError.new('BORK'))
               else
-                Future.resolved(block.call(connections[host]))
+                Future.resolved(block.call(create_raw_connection(host, port)))
               end
             else
-              Future.resolved(block.call(connections[host]))
+              Future.resolved(block.call(create_raw_connection(host, port)))
             end
           end
           client.start.value
-          handlers['node1.example.com'].closed_listener.call(StandardError.new('BORK'))
+          client.created_connections.find { |c| c.host == 'node1.example.com' }.closed_listener.call(StandardError.new('BORK'))
           connection_attempts_by_host['node0.example.com'].should == 1
           connection_attempts_by_host['node1.example.com'].should == 10
           connection_attempts_by_host['node2.example.com'].should == 1
@@ -320,24 +279,14 @@ module Ione
           client.start.value
         end
 
-        before do
-          handlers.each_value do |handler|
-            handler.stub(:requests).and_return([])
-            handler.stub(:send_request) do |request|
-              handler.requests << request
-              Future.resolved
-            end
-          end
-        end
-
         it 'sends requests over a random connection' do
           1000.times do
             client.send_request('PING')
           end
-          request_fractions = handlers.values.map { |handler| handler.requests.size/1000.0 }
-          request_fractions[0].should be_within(0.1).of(0.33)
-          request_fractions[1].should be_within(0.1).of(0.33)
-          request_fractions[2].should be_within(0.1).of(0.33)
+          request_fractions = client.created_connections.each_with_object({}) { |connection, acc| acc[connection.host] = connection.requests.size/1000.0 }
+          request_fractions['node0.example.com'].should be_within(0.1).of(0.33)
+          request_fractions['node1.example.com'].should be_within(0.1).of(0.33)
+          request_fractions['node2.example.com'].should be_within(0.1).of(0.33)
         end
 
         it 'uses the provided routing strategy to pick a connection' do
@@ -349,23 +298,23 @@ module Ione
               connections.find { |c| c.host == 'node2.example.com' }
             end
           end
-          client = described_class.new(client_handler_factory, %w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], io_reactor: io_reactor, logger: logger, connection_timeout: 7, routing_strategy: strategy)
+          client = ClientSpec::TestClient.new(%w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], io_reactor: io_reactor, logger: logger, connection_timeout: 7, routing_strategy: strategy)
           client.start.value
           client.send_request('PING')
           client.send_request('FOO')
           client.send_request('FOO')
-          request_counts = handlers.values.map { |handler| handler.requests.size }
-          request_counts[0].should == 1
-          request_counts[1].should == 0
-          request_counts[2].should == 2
+          request_counts = client.created_connections.each_with_object({}) { |connection, acc| acc[connection.host] = connection.requests.size }
+          request_counts['node0.example.com'].should == 1
+          request_counts['node1.example.com'].should == 0
+          request_counts['node2.example.com'].should == 2
         end
 
         it 'retries the request when it failes because a connection closed' do
           promises = [Promise.new, Promise.new]
           counter = 0
           received_requests = []
-          handlers.each_value do |handler|
-            handler.stub(:send_request) do |request|
+          client.created_connections.each do |connection|
+            connection.stub(:send_request) do |request|
               received_requests << request
               promises[counter].future.tap { counter += 1 }
             end
@@ -378,11 +327,65 @@ module Ione
         end
 
         it 'logs when a request is retried' do
-          handlers.each_value { |handler| handler.stub(:send_request).and_return(Future.failed(Io::ConnectionClosedError.new('CLOSED BORK'))) }
+          client.created_connections.each { |connection| connection.stub(:send_request).and_return(Future.failed(Io::ConnectionClosedError.new('CLOSED BORK'))) }
           client.send_request('PING')
           logger.should have_received(:warn).with(/request failed because the connection closed, retrying/i).at_least(1).times
         end
       end
+    end
+  end
+end
+
+module ClientSpec
+  class TestClient < Ione::Rpc::Client
+    attr_reader :created_connections
+
+    def initialize(*)
+      super
+      @created_connections = []
+    end
+
+    def connection_initializer=(initializer)
+      @connection_initializer = initializer
+    end
+
+    def create_connection(connection)
+      @created_connections << TestConnection.new(connection)
+      @created_connections.last
+    end
+
+    def initialize_connection(connection)
+      if @connection_initializer
+        @connection_initializer.call(connection)
+      else
+        Ione::Future.resolved
+      end
+    end
+  end
+
+  class TestConnection
+    attr_reader :closed_listener, :requests
+
+    def initialize(raw_connection)
+      @raw_connection = raw_connection
+      @requests = []
+    end
+
+    def on_closed(&listener)
+      @closed_listener = listener
+    end
+
+    def host
+      @raw_connection.host
+    end
+
+    def port
+      @raw_connection.port
+    end
+
+    def send_request(request)
+      @requests << request
+      Ione::Future.resolved
     end
   end
 end
