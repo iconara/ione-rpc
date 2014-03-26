@@ -11,14 +11,15 @@ module Ione
       end
 
       let :io_reactor do
+        running = [false]
         r = double(:io_reactor)
-        r.stub(:running?).and_return(false)
+        r.stub(:running?) { running[0] }
         r.stub(:start) do
-          r.stub(:running?).and_return(true)
+          running[0] = true
           Future.resolved(r)
         end
         r.stub(:stop) do
-          r.stub(:running?).and_return(false)
+          running[0] = false
           Future.resolved(r)
         end
         r.stub(:connect) do |host, port, _, &block|
@@ -124,7 +125,7 @@ module Ione
           end
           io_reactor.stub(:connect).and_return(Future.failed(StandardError.new('BORK')))
           f = client.start
-          io_reactor.stop
+          io_reactor.stop.value
           expect { f.value }.to raise_error(Io::ConnectionError, /IO reactor stopped while connecting/i)
         end
 
