@@ -6,7 +6,6 @@ module Ione
       def initialize(hosts, options={})
         @hosts = hosts
         @lock = Mutex.new
-        @routing_strategy = options[:routing_strategy] || RandomRoutingStrategy.new
         @connection_timeout = options[:connection_timeout] || 5
         @io_reactor = options[:io_reactor] || Io::IoReactor.new
         @connection_initializer = options[:connection_initializer]
@@ -28,7 +27,7 @@ module Ione
       end
 
       def send_request(request, connection=nil)
-        connection = connection || @lock.synchronize { @routing_strategy.choose_connection(@connections, request) }
+        connection = connection || @lock.synchronize { choose_connection(@connections, request) }
         if connection
           f = connection.send_message(request)
           f = f.fallback do |error|
@@ -55,13 +54,11 @@ module Ione
         raise NotImplementedError, %(Client#create_connection not implemented)
       end
 
-      private
-
-      class RandomRoutingStrategy
-        def choose_connection(connections, request)
-          connections.sample
-        end
+      def choose_connection(connections, request)
+        connections.sample
       end
+
+      private
 
       def connect_all
         futures = @hosts.map do |host|

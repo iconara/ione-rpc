@@ -285,26 +285,6 @@ module Ione
           request_fractions['node2.example.com'].should be_within(0.1).of(0.33)
         end
 
-        it 'uses the provided routing strategy to pick a connection' do
-          strategy = double(:strategy)
-          strategy.stub(:choose_connection) do |connections, request|
-            if request == 'PING'
-              connections.find { |c| c.host == 'node0.example.com' }
-            else
-              connections.find { |c| c.host == 'node2.example.com' }
-            end
-          end
-          client = ClientSpec::TestClient.new(%w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], io_reactor: io_reactor, logger: logger, connection_timeout: 7, routing_strategy: strategy)
-          client.start.value
-          client.send_request('PING')
-          client.send_request('FOO')
-          client.send_request('FOO')
-          request_counts = client.created_connections.each_with_object({}) { |connection, acc| acc[connection.host] = connection.requests.size }
-          request_counts['node0.example.com'].should == 1
-          request_counts['node1.example.com'].should == 0
-          request_counts['node2.example.com'].should == 2
-        end
-
         it 'retries the request when it failes because a connection closed' do
           promises = [Promise.new, Promise.new]
           counter = 0
