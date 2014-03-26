@@ -43,35 +43,35 @@ module Ione
 
       context 'when the connection closes' do
         it 'fails all outstanding requests when closing' do
-          f1 = peer.send_request('hello')
-          f2 = peer.send_request('world')
+          f1 = peer.send_message('hello')
+          f2 = peer.send_message('world')
           connection.closed_listener.call
           expect { f1.value }.to raise_error(Io::ConnectionClosedError)
           expect { f2.value }.to raise_error(Io::ConnectionClosedError)
         end
       end
 
-      describe '#send_request' do
+      describe '#send_message' do
         it 'encodes and sends a request frame' do
-          peer.send_request('hello')
+          peer.send_message('hello')
           connection.written_bytes.should start_with('hello')
         end
 
         it 'uses the next available channel' do
-          peer.send_request('hello')
-          peer.send_request('foo')
+          peer.send_message('hello')
+          peer.send_message('foo')
           connection.data_listener.call('world@0')
-          peer.send_request('bar')
+          peer.send_message('bar')
           connection.written_bytes.should == 'hello@000foo@001bar@000'
         end
 
         it 'queues requests when all channels are in use' do
-          (max_channels + 2).times { peer.send_request('foo') }
+          (max_channels + 2).times { peer.send_message('foo') }
           connection.written_bytes.bytesize.should == max_channels * 7
         end
 
         it 'sends queued requests when channels become available' do
-          (max_channels + 2).times { |i| peer.send_request("foo#{i.to_s.rjust(3, '0')}") }
+          (max_channels + 2).times { |i| peer.send_message("foo#{i.to_s.rjust(3, '0')}") }
           length_before = connection.written_bytes.bytesize
           connection.data_listener.call('bar@003')
           connection.written_bytes[length_before, 10].should == "foo#{max_channels.to_s.rjust(3, '0')}@003"
@@ -80,7 +80,7 @@ module Ione
         end
 
         it 'returns a future that resolves to the response' do
-          f = peer.send_request('foo')
+          f = peer.send_message('foo')
           f.should_not be_resolved
           connection.data_listener.call('bar@000')
           f.value.payload.should == 'bar'

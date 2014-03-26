@@ -30,7 +30,7 @@ module Ione
       def send_request(request, connection=nil)
         connection = connection || @lock.synchronize { @routing_strategy.choose_connection(@connections, request) }
         if connection
-          f = connection.send_request(request)
+          f = connection.send_message(request)
           f = f.fallback do |error|
             if error.is_a?(Io::ConnectionClosedError)
               @logger.warn('Request failed because the connection closed, retrying') if @logger

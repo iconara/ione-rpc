@@ -37,6 +37,8 @@ module RpcSpec
       @messages << pair
     end
 
-    public :send_message
+    def send_message(message)
+      write_message(message, 0)
+    end
   end
 end

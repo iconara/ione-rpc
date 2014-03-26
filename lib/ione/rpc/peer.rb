@@ -40,7 +40,7 @@ module Ione
         @closed_promise.fulfill(cause)
       end
 
-      def send_message(message, channel)
+      def write_message(message, channel)
         @connection.write(@protocol.encode(message, channel))
       end
     end

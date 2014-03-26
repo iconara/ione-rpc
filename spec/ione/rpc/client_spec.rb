@@ -176,7 +176,7 @@ module Ione
         before do
           client.start.value
           client.created_connections.each do |connection|
-            connection.stub(:send_request).with('PING').and_return(Future.resolved('PONG'))
+            connection.stub(:send_message).with('PING').and_return(Future.resolved('PONG'))
           end
         end
 
@@ -232,7 +232,7 @@ module Ione
 
         it 'logs when requests fail' do
           client.start.value
-          client.created_connections.each { |connection| connection.stub(:send_request).with('PING').and_return(Future.failed(StandardError.new('BORK'))) }
+          client.created_connections.each { |connection| connection.stub(:send_message).with('PING').and_return(Future.failed(StandardError.new('BORK'))) }
           client.send_request('PING')
           logger.should have_received(:warn).with(/request failed: BORK/i)
         end
@@ -314,7 +314,7 @@ module Ione
           counter = 0
           received_requests = []
           client.created_connections.each do |connection|
-            connection.stub(:send_request) do |request|
+            connection.stub(:send_message) do |request|
               received_requests << request
               promises[counter].future.tap { counter += 1 }
             end
@@ -327,7 +327,7 @@ module Ione
         end
 
         it 'logs when a request is retried' do
-          client.created_connections.each { |connection| connection.stub(:send_request).and_return(Future.failed(Io::ConnectionClosedError.new('CLOSED BORK'))) }
+          client.created_connections.each { |connection| connection.stub(:send_message).and_return(Future.failed(Io::ConnectionClosedError.new('CLOSED BORK'))) }
           client.send_request('PING')
           logger.should have_received(:warn).with(/request failed because the connection closed, retrying/i).at_least(1).times
         end
@@ -383,7 +383,7 @@ module ClientSpec
       @raw_connection.port
     end
 
-    def send_request(request)
+    def send_message(request)
       @requests << request
       Ione::Future.resolved
     end

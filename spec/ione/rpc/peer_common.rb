@@ -75,9 +75,9 @@ shared_examples 'peers' do
     end
 
     it 'writes the encoded frame to the connection' do
-      peer.send_message('FUZZBAZZ', 9)
-      protocol.should have_received(:encode).with('FUZZBAZZ', 9)
-      connection.written_bytes.should == Ione::ByteBuffer.new('FUZZBAZZ@9')
+      peer.send_message('FUZZBAZZ')
+      protocol.should have_received(:encode).with('FUZZBAZZ', 0)
+      connection.written_bytes.should == 'FUZZBAZZ@0'
     end
   end
 

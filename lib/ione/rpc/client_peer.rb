@@ -13,13 +13,13 @@ module Ione
         @queue = []
       end
 
-      def send_request(request)
+      def send_message(request)
         promise = Ione::Promise.new
         channel = @lock.synchronize do
           take_channel(promise)
         end
         if channel
-          send_message(request, channel)
+          write_message(request, channel)
         else
           @lock.synchronize do
             @queue << [request, promise]
@@ -49,7 +49,7 @@ module Ione
           while count < max
             request, promise = @queue[count]
             if (channel = take_channel(promise))
-              send_message(request, channel)
+              write_message(request, channel)
               count += 1
             else
               break
