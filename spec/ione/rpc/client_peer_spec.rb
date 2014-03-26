@@ -86,6 +86,19 @@ module Ione
           f.value.payload.should == 'bar'
         end
       end
+
+      describe '#send_startup_message' do
+        it 'does nothing by default' do
+          peer.send_startup_message.value
+          connection.written_bytes.should be_empty
+        end
+
+        it 'uses the block given to the constructor to create a startup message' do
+          peer = RpcSpec::TestClientPeer.new(connection, protocol, max_channels) { |s| "start/#{s.host}" }
+          peer.send_startup_message
+          connection.written_bytes.should == 'start/example.com@000'
+        end
+      end
     end
   end
 end

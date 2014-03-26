@@ -55,10 +55,6 @@ module Ione
         raise NotImplementedError, %(Client#create_connection not implemented)
       end
 
-      def initialize_connection(connection)
-        Future.resolved
-      end
-
       private
 
       class RandomRoutingStrategy
@@ -92,7 +88,7 @@ module Ione
             ff.flat_map { connect(host, port, next_timeout) }
           end
           f.flat_map do |connection|
-            initialize_connection(connection)
+            connection.send_startup_message.map(connection)
           end
         else
           Future.failed(Io::ConnectionError.new('IO reactor stopped while connecting to %s:%d' % [host, port]))

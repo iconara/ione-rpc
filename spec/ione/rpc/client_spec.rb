@@ -150,14 +150,9 @@ module Ione
           logger.should have_received(:warn).with(/failed connecting to node1\.example\.com:5432, will try again in \d+s/i).exactly(2).times
         end
 
-        it 'calls the connection initializer implementation after the connection has been established' do
-          initialized = []
-          client.connection_initializer = lambda do |connection|
-            initialized << connection
-            Future.resolved
-          end
+        it 'tells the connection to send its startup message once the connection has been established' do
           client.start.value
-          initialized.should == client.created_connections
+          client.created_connections.each { |c| c.startup_message_sent.should be_true }
         end
       end
 
@@ -364,7 +359,7 @@ module ClientSpec
   end
 
   class TestConnection
-    attr_reader :closed_listener, :requests
+    attr_reader :closed_listener, :requests, :startup_message_sent
 
     def initialize(raw_connection)
       @raw_connection = raw_connection
@@ -385,6 +380,11 @@ module ClientSpec
 
     def send_message(request)
       @requests << request
+      Ione::Future.resolved
+    end
+
+    def send_startup_message
+      @startup_message_sent = true
       Ione::Future.resolved
     end
   end
