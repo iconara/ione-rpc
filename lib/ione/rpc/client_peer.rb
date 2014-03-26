@@ -6,8 +6,8 @@ require 'ione'
 module Ione
   module Rpc
     class ClientPeer < Peer
-      def initialize(connection, protocol, max_channels, &startup_message_factory)
-        super(connection, protocol)
+      def initialize(connection, codec, max_channels, &startup_message_factory)
+        super(connection, codec)
         @startup_message_factory = startup_message_factory
         @lock = Mutex.new
         @channels = [nil] * max_channels

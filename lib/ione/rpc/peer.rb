@@ -5,13 +5,13 @@ module Ione
     class Peer
       attr_reader :host, :port
 
-      def initialize(connection, protocol)
+      def initialize(connection, codec)
         @connection = connection
         @connection.on_data(&method(:handle_data))
         @connection.on_closed(&method(:handle_closed))
         @host = @connection.host
         @port = @connection.port
-        @protocol = protocol
+        @codec = codec
         @buffer = Ione::ByteBuffer.new
         @closed_promise = Promise.new
         @current_message = nil
@@ -26,7 +26,7 @@ module Ione
       def handle_data(new_data)
         @buffer << new_data
         while true
-          @current_message, channel = @protocol.decode(@buffer, @current_message)
+          @current_message, channel = @codec.decode(@buffer, @current_message)
           break if @current_message.partial?
           handle_message(@current_message, channel)
           @current_message = nil
@@ -41,7 +41,7 @@ module Ione
       end
 
       def write_message(message, channel)
-        @connection.write(@protocol.encode(message, channel))
+        @connection.write(@codec.encode(message, channel))
       end
     end
   end

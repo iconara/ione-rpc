@@ -29,7 +29,7 @@ shared_examples 'peers' do
 
     before do
       channel = 9
-      protocol.stub(:decode) do |buffer, previous_frame|
+      codec.stub(:decode) do |buffer, previous_frame|
         if buffer.empty?
           [empty_frame, channel]
         elsif buffer.index('FAKEPARTIALFRAME') == 0
@@ -69,14 +69,14 @@ shared_examples 'peers' do
 
   context 'when sending data' do
     before do
-      protocol.stub(:encode) do |message, channel|
+      codec.stub(:encode) do |message, channel|
         "#{message}@#{channel}"
       end
     end
 
     it 'writes the encoded frame to the connection' do
       peer.send_message('FUZZBAZZ')
-      protocol.should have_received(:encode).with('FUZZBAZZ', 0)
+      codec.should have_received(:encode).with('FUZZBAZZ', 0)
       connection.written_bytes.should == 'FUZZBAZZ@0'
     end
   end

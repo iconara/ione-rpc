@@ -8,15 +8,15 @@ module Ione
   module Rpc
     describe ClientPeer do
       let! :peer do
-        RpcSpec::TestClientPeer.new(connection, protocol, max_channels)
+        RpcSpec::TestClientPeer.new(connection, codec, max_channels)
       end
 
       let :connection do
         RpcSpec::FakeConnection.new
       end
 
-      let :protocol do
-        double(:protocol)
+      let :codec do
+        double(:codec)
       end
 
       let :max_channels do
@@ -24,7 +24,7 @@ module Ione
       end
 
       before do
-        protocol.stub(:decode) do |buffer, current_frame|
+        codec.stub(:decode) do |buffer, current_frame|
           message = buffer.to_s.scan(/[\w\d]+@\d+/).flatten.first
           if message
             payload, channel = message.split('@')
@@ -34,7 +34,7 @@ module Ione
             [double(:partial? => true), nil]
           end
         end
-        protocol.stub(:encode) do |message, channel|
+        codec.stub(:encode) do |message, channel|
           '%s@%03d' % [message, channel]
         end
       end
@@ -94,7 +94,7 @@ module Ione
         end
 
         it 'uses the block given to the constructor to create a startup message' do
-          peer = RpcSpec::TestClientPeer.new(connection, protocol, max_channels) { |s| "start/#{s.host}" }
+          peer = RpcSpec::TestClientPeer.new(connection, codec, max_channels) { |s| "start/#{s.host}" }
           peer.send_startup_message
           connection.written_bytes.should == 'start/example.com@000'
         end

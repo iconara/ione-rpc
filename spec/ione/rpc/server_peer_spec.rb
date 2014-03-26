@@ -8,15 +8,15 @@ module Ione
   module Rpc
     describe ServerPeer do
       let! :peer do
-        RpcSpec::TestServerPeer.new(connection, protocol)
+        RpcSpec::TestServerPeer.new(connection, codec)
       end
 
       let :connection do
         RpcSpec::FakeConnection.new
       end
 
-      let :protocol do
-        double(:protocol)
+      let :codec do
+        double(:codec)
       end
 
       include_examples 'peers'
