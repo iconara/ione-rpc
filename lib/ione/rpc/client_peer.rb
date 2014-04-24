@@ -6,9 +6,8 @@ require 'ione'
 module Ione
   module Rpc
     class ClientPeer < Peer
-      def initialize(connection, codec, max_channels, &startup_message_factory)
+      def initialize(connection, codec, max_channels)
         super(connection, codec)
-        @startup_message_factory = startup_message_factory
         @lock = Mutex.new
         @channels = [nil] * max_channels
         @queue = []
@@ -27,14 +26,6 @@ module Ione
           end
         end
         promise.future
-      end
-
-      def send_startup_message
-        if @startup_message_factory
-          send_message(@startup_message_factory.call(self))
-        else
-          Future.resolved
-        end
       end
 
       private

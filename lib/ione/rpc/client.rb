@@ -3,12 +3,14 @@
 module Ione
   module Rpc
     class Client
-      def initialize(hosts, options={})
+      def initialize(hosts, codec, options={})
         @hosts = hosts
+        @codec = codec
         @lock = Mutex.new
         @connection_timeout = options[:connection_timeout] || 5
         @io_reactor = options[:io_reactor] || Io::IoReactor.new
         @connection_initializer = options[:connection_initializer]
+        @max_channels = options[:max_channels] || 128
         @logger = options[:logger]
         @connections = []
       end
@@ -50,8 +52,8 @@ module Ione
 
       protected
 
-      def create_connection(connection)
-        raise NotImplementedError, %(Client#create_connection not implemented)
+      def initialize_connection(connection)
+        Future.resolved
       end
 
       def choose_connection(connections, request)
@@ -85,11 +87,15 @@ module Ione
             ff.flat_map { connect(host, port, next_timeout) }
           end
           f.flat_map do |connection|
-            connection.send_startup_message.map(connection)
+            initialize_connection(connection).map(connection)
           end
         else
           Future.failed(Io::ConnectionError.new('IO reactor stopped while connecting to %s:%d' % [host, port]))
         end
+      end
+
+      def create_connection(raw_connection)
+        Ione::Rpc::ClientPeer.new(raw_connection, @codec, @max_channels)
       end
 
       def handle_connected(connection)

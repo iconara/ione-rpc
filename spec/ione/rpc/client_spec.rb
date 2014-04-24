@@ -7,7 +7,7 @@ module Ione
   module Rpc
     describe Client do
       let :client do
-        ClientSpec::TestClient.new(%w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], io_reactor: io_reactor, logger: logger, connection_timeout: 7)
+        ClientSpec::TestClient.new(%w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], codec, io_reactor: io_reactor, logger: logger, connection_timeout: 7)
       end
 
       let :io_reactor do
@@ -28,15 +28,27 @@ module Ione
         r
       end
 
+      let :codec do
+        double(:codec)
+      end
+
       let :logger do
         double(:logger, warn: nil, info: nil, debug: nil)
       end
 
       def create_raw_connection(host, port)
+        written_data = ''
         connection = double("connection@#{host}:#{port}")
         connection.stub(:host).and_return(host)
         connection.stub(:port).and_return(port)
+        connection.stub(:on_data)
+        connection.stub(:on_closed)
+        connection.stub(:write)
         connection
+      end
+
+      before do
+        codec.stub(:encode) { |input, channel| input }
       end
 
       describe '#start' do
@@ -151,9 +163,9 @@ module Ione
           logger.should have_received(:warn).with(/failed connecting to node1\.example\.com:5432, will try again in \d+s/i).exactly(2).times
         end
 
-        it 'tells the connection to send its startup message once the connection has been established' do
+        it 'sends a startup message once the connection has been established' do
           client.start.value
-          client.created_connections.each { |c| c.startup_message_sent.should be_true }
+          client.created_connections.each { |c| c.requests.first.should == 'STARTUP' }
         end
       end
 
@@ -169,20 +181,28 @@ module Ione
       end
 
       describe '#send_request' do
-        before do
-          client.start.value
-          client.created_connections.each do |connection|
-            connection.stub(:send_message).with('PING').and_return(Future.resolved('PONG'))
+        context 'when expecting a response' do
+          before do
+            client.start.value
+            client.created_connections.each do |connection|
+              connection.stub(:send_message).with('PING').and_return(Future.resolved('PONG'))
+            end
+          end
+
+          it 'returns a future that resolves to the response from the server' do
+            client.send_request('PING').value.should == 'PONG'
+          end
+
+          it 'returns a failed future when called when not connected' do
+            client.stop.value
+            expect { client.send_request('PING').value }.to raise_error(Io::ConnectionError)
           end
         end
 
-        it 'returns a future that resolves to the response from the server' do
-          client.send_request('PING').value.should == 'PONG'
-        end
-
-        it 'returns a failed future when called when not connected' do
-          client.stop.value
-          expect { client.send_request('PING').value }.to raise_error(Io::ConnectionError)
+        it 'uses the codec to encode frames' do
+          client.start.value
+          client.send_request('PING').value
+          codec.should have_received(:encode).with('PING', anything)
         end
       end
 
@@ -326,29 +346,23 @@ module ClientSpec
       @created_connections = []
     end
 
-    def connection_initializer=(initializer)
-      @connection_initializer = initializer
-    end
-
-    def create_connection(connection)
-      @created_connections << TestConnection.new(connection)
+    def create_connection(raw_connection)
+      peer_connection = super
+      @created_connections << TestConnection.new(raw_connection, peer_connection)
       @created_connections.last
     end
 
     def initialize_connection(connection)
-      if @connection_initializer
-        @connection_initializer.call(connection)
-      else
-        Ione::Future.resolved
-      end
+      send_request('STARTUP', connection)
     end
   end
 
   class TestConnection
-    attr_reader :closed_listener, :requests, :startup_message_sent
+    attr_reader :closed_listener, :requests
 
-    def initialize(raw_connection)
+    def initialize(raw_connection, peer_connection)
       @raw_connection = raw_connection
+      @peer_connection = peer_connection
       @requests = []
     end
 
@@ -366,11 +380,7 @@ module ClientSpec
 
     def send_message(request)
       @requests << request
-      Ione::Future.resolved
-    end
-
-    def send_startup_message
-      @startup_message_sent = true
+      @peer_connection.send_message(request)
       Ione::Future.resolved
     end
   end
