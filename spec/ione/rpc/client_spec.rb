@@ -303,7 +303,12 @@ module Ione
         end
 
         it 'logs when a request is retried' do
-          client.created_connections.each { |connection| connection.stub(:send_message).and_return(Future.failed(Io::ConnectionClosedError.new('CLOSED BORK'))) }
+          client.created_connections.each do |connection|
+            connection.stub(:send_message) do
+              connection.closed_listener.call
+              Future.failed(Io::ConnectionClosedError.new('CLOSED BORK'))
+            end
+          end
           client.send_request('PING')
           logger.should have_received(:warn).with(/request failed because the connection closed, retrying/i).at_least(1).times
         end
