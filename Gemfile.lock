@@ -1,3 +1,9 @@
+PATH
+  remote: .
+  specs:
+    ione-rpc (1.0.0)
+      ione (~> 1)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -38,5 +44,6 @@ PLATFORMS
 DEPENDENCIES
   coveralls
   ione (= 1.1.0.pre0)
+  ione-rpc!
   rspec
   simplecov
