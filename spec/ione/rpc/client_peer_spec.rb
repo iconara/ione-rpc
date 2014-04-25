@@ -29,9 +29,9 @@ module Ione
           if message
             payload, channel = message.split('@')
             buffer.discard(message.bytesize)
-            [double(:partial? => false, payload: payload), channel.to_i(10)]
+            [double(:complete, payload: payload), channel.to_i(10), true]
           else
-            [double(:partial? => true), nil]
+            [double(:partial), nil, false]
           end
         end
         codec.stub(:encode) do |message, channel|

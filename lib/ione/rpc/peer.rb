@@ -26,8 +26,8 @@ module Ione
       def handle_data(new_data)
         @buffer << new_data
         while true
-          @current_message, channel = @codec.decode(@buffer, @current_message)
-          break if @current_message.partial?
+          @current_message, channel, complete = @codec.decode(@buffer, @current_message)
+          break unless complete
           handle_message(@current_message, channel)
           @current_message = nil
         end

@@ -28,19 +28,20 @@ module Ione
       [json.bytesize, channel, json].pack('Nca*')
     end
 
-    def decode(buffer, current_message)
-      current_message ||= JsonFrame.new(buffer)
-      if current_message.header_ready?
-        current_message.read_header
+    def decode(buffer, state)
+      state ||= State.new(buffer)
+      if state.header_ready?
+        state.read_header
       end
-      if current_message.body_ready?
-        current_message.read_body
+      if state.body_ready?
+        return state.read_body, state.channel, true
+      else
+        return state, nil, false
       end
-      return current_message, current_message.channel
     end
 
-    class JsonFrame
-      attr_accessor :buffer, :length, :channel, :body
+    class State
+      attr_reader :channel
 
       def initialize(buffer)
         @buffer = buffer
@@ -52,7 +53,7 @@ module Ione
       end
 
       def read_body
-        @body = JSON.load(@buffer.read(@length))
+        JSON.load(@buffer.read(@length))
       end
 
       def <<(data)

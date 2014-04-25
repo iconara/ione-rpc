@@ -40,7 +40,7 @@ describe 'A simple client/server protocol setup' do
       client.send_request('foo' => 'bar')
     end
     responses = Ione::Future.all(*futures).value
-    responses.map(&:body).should == Array.new(clients.size) { {'hello' => 'world'} }
+    responses.should == Array.new(clients.size) { {'hello' => 'world'} }
   end
 end
 
@@ -81,34 +81,35 @@ describe Ione::JsonCodec do
     end
 
     it 'returns a partial message when there are less than five bytes' do
-      message, _ = codec.decode(Ione::ByteBuffer.new(encoded_message[0, 4]), nil)
-      message.should be_partial
+      _, _, complete = codec.decode(Ione::ByteBuffer.new(encoded_message[0, 4]), nil)
+      complete.should be_false
     end
 
     it 'returns a partial message when the combined size of a previous partial message an new data is still less than the full frame size' do
       buffer = Ione::ByteBuffer.new
       buffer << encoded_message[0, 10]
-      message, _ = codec.decode(buffer, nil)
+      message, _, _ = codec.decode(buffer, nil)
       buffer << encoded_message[10, 4]
-      message, _ = codec.decode(buffer, message)
-      message.should be_partial
+      _, _, complete = codec.decode(buffer, message)
+      complete.should be_false
     end
 
     it 'returns a message and channel when it gets a full frame in one chunk' do
-      message, channel = codec.decode(Ione::ByteBuffer.new(encoded_message), nil)
-      message.body.should == object
+      message, channel, complete = codec.decode(Ione::ByteBuffer.new(encoded_message), nil)
+      complete.should be_true
+      message.should == object
       channel.should == 42
     end
 
     it 'returns a message and channel when it gets a full frame in chunks' do
       buffer = Ione::ByteBuffer.new
       buffer << encoded_message[0, 4]
-      message, _ = codec.decode(buffer, nil)
+      message, _, _ = codec.decode(buffer, nil)
       buffer << encoded_message[4, 10]
-      message, _ = codec.decode(buffer, message)
+      message, _, _ = codec.decode(buffer, message)
       buffer << encoded_message[14..-1]
-      message, channel = codec.decode(buffer, message)
-      message.body.should == object
+      message, channel, _ = codec.decode(buffer, message)
+      message.should == object
       channel.should == 42
     end
 
@@ -119,7 +120,7 @@ describe Ione::JsonCodec do
       buffer << encoded_message[10..-1]
       buffer << 'fooooo'
       message, channel = codec.decode(buffer, message)
-      message.body.should == object
+      message.should == object
       channel.should == 42
     end
   end

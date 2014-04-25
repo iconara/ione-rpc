@@ -31,16 +31,16 @@ shared_examples 'peers' do
       channel = 9
       codec.stub(:decode) do |buffer, previous_frame|
         if buffer.empty?
-          [empty_frame, channel]
+          [empty_frame, channel, false]
         elsif buffer.index('FAKEPARTIALFRAME') == 0
           buffer.read(16)
-          [partial_frame, channel]
+          [partial_frame, channel, false]
         elsif buffer.index('FAKEENDOFFRAME') == 0 && previous_frame == partial_frame
           buffer.read(14)
-          [complete_frame, channel]
+          [complete_frame, channel, true]
         elsif buffer.index('FOO') == 0 || buffer.index('BAR') == 0 || buffer.index('BAZ') == 0
           buffer.read(3)
-          [complete_frame, channel]
+          [complete_frame, channel, true]
         end
       end
     end
