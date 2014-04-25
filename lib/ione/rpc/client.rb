@@ -21,7 +21,6 @@ module Ione
         @lock = Mutex.new
         @connection_timeout = options[:connection_timeout] || 5
         @io_reactor = options[:io_reactor] || Io::IoReactor.new
-        @connection_initializer = options[:connection_initializer]
         @max_channels = options[:max_channels] || 128
         @logger = options[:logger]
         @connections = []
