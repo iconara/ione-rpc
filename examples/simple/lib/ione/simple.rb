@@ -8,7 +8,7 @@ require 'logger'
 module Ione
   class SimpleServer < Ione::Rpc::Server
     def initialize(port, options={})
-      super(port, JsonCodec.new, options)
+      super(port, Ione::Rpc::StandardCodec.new(JSON), options)
     end
 
     def handle_message(message, *_)
@@ -18,17 +18,7 @@ module Ione
 
   class SimpleClient < Ione::Rpc::Client
     def initialize(options={})
-      super(JsonCodec.new, options)
-    end
-  end
-
-  class JsonCodec < Ione::Rpc::Codec
-    def encode_message(message)
-      JSON.dump(message)
-    end
-
-    def decode_message(str)
-      JSON.load(str)
+      super(Ione::Rpc::StandardCodec.new(JSON), options)
     end
   end
 end

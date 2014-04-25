@@ -55,5 +55,19 @@ module Ione
         end
       end
     end
+
+    class StandardCodec < Codec
+      def initialize(delegate)
+        @delegate = delegate
+      end
+
+      def encode_message(message)
+        @delegate.dump(message)
+      end
+
+      def decode_message(str)
+        @delegate.load(str)
+      end
+    end
   end
 end

@@ -90,6 +90,26 @@ module Ione
         end
       end
     end
+
+    describe StandardCodec do
+      let :codec do
+        described_class.new(JSON)
+      end
+
+      describe '#encode' do
+        it 'calls #dump on the delegate' do
+          codec.encode({'foo' => 'bar'}, 0)[6..-1].should == '{"foo":"bar"}'
+        end
+      end
+
+      describe '#decode' do
+        it 'calls #load on the delegate' do
+          buffer = Ione::ByteBuffer.new(%(\x01\x00\x00\x00\x00\x0d{"foo":"bar"}))
+          message, _, _ = codec.decode(buffer, nil)
+          message.should eql('foo' => 'bar')
+        end
+      end
+    end
   end
 end
 
