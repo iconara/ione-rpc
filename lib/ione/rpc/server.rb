@@ -5,8 +5,9 @@ module Ione
     class Server
       attr_reader :port
 
-      def initialize(port, options={})
+      def initialize(port, codec, options={})
         @port = port
+        @codec = codec
         @io_reactor = options[:io_reactor] || Io::IoReactor.new
         @stop_reactor = !options[:io_reactor]
         @queue_length = options[:queue_size] || 5
@@ -23,8 +24,11 @@ module Ione
 
       protected
 
-      def create_connection(connection)
-        raise NotImplementedError, %(Server#create_connection not implemented)
+      def handle_connection(peer)
+      end
+
+      def handle_message(message, channel, peer)
+        Future.resolved
       end
 
       private
@@ -32,7 +36,21 @@ module Ione
       def setup_server
         @io_reactor.bind(@bind_address, @port, @queue_length) do |acceptor|
           acceptor.on_accept do |connection|
-            create_connection(connection)
+            handle_connection(ServerPeer.new(connection, @codec, self))
+          end
+        end
+      end
+
+      class ServerPeer < Peer
+        def initialize(connection, codec, server)
+          super(connection, codec)
+          @server = server
+        end
+
+        def handle_message(message, channel)
+          f = @server.handle_message(message, channel, self)
+          f.on_value do |response|
+            write_message(response, channel)
           end
         end
       end

@@ -7,7 +7,11 @@ module Ione
   module Rpc
     describe Server do
       let :server do
-        ServerSpec::TestServer.new(4321, io_reactor: io_reactor)
+        ServerSpec::TestServer.new(4321, codec, io_reactor: io_reactor)
+      end
+
+      let :codec do
+        double(:codec)
       end
 
       let :io_reactor do
@@ -16,6 +20,10 @@ module Ione
         r.stub(:stop).and_return(Ione::Future.resolved(r))
         r.stub(:bind).and_return(Ione::Future.resolved)
         r
+      end
+
+      before do
+        codec.stub(:encode) { |msg, _| msg }
       end
 
       describe '#port' do
@@ -36,13 +44,13 @@ module Ione
         end
 
         it 'starts a server that binds to the specified address' do
-          server = described_class.new(4321, io_reactor: io_reactor, bind_address: '1.1.1.1')
+          server = described_class.new(4321, codec, io_reactor: io_reactor, bind_address: '1.1.1.1')
           server.start.value
           io_reactor.should have_received(:bind).with('1.1.1.1', 4321, anything)
         end
 
         it 'uses the specified queue size' do
-          server = described_class.new(4321, io_reactor: io_reactor, queue_size: 11)
+          server = described_class.new(4321, codec, io_reactor: io_reactor, queue_size: 11)
           server.start.value
           io_reactor.should have_received(:bind).with(anything, anything, 11)
         end
@@ -63,9 +71,21 @@ module Ione
         end
       end
 
-      context 'when a client connects' do
+      shared_context 'client_connections' do
         let :accept_listeners do
           []
+        end
+
+        let :raw_connection do
+          double(:connection)
+        end
+
+        before do
+          raw_connection.stub(:on_data)
+          raw_connection.stub(:on_closed)
+          raw_connection.stub(:host).and_return('client.example.com')
+          raw_connection.stub(:port).and_return(34534)
+          raw_connection.stub(:write)
         end
 
         before do
@@ -79,11 +99,53 @@ module Ione
           end
         end
 
-        it 'creates a protocol handler for the new connection' do
-          connection = double(:connection).as_null_object
+        before do
           server.start.value
-          handler = accept_listeners.first.call(connection)
-          server.created_connections.first.raw_connection.should == connection
+        end
+      end
+
+      context 'when a client connects' do
+        include_context 'client_connections'
+
+        before do
+          accept_listeners.first.call(raw_connection)
+        end
+
+        it 'calls #handle_connection with the client connection' do
+          server.connections.should have(1).item
+          server.connections.first.host.should == raw_connection.host
+        end
+      end
+
+      context 'when a client sends a request' do
+        include_context 'client_connections'
+
+        before do
+          accept_listeners.first.call(raw_connection)
+        end
+
+        it 'calls #handle_message with request' do
+          server.connections.first.handle_message('FOOBAZ', 42)
+          server.received_messages.first.should == ['FOOBAZ', 42, server.connections.first]
+        end
+
+        it 'responds to the same peer and channel when the future returned by #handle_message is resolved' do
+          promise = Promise.new
+          server.override_handle_message { promise.future }
+          peer = server.connections.first
+          peer.stub(:write_message)
+          peer.handle_message('FOOBAZ', 42)
+          peer.should_not have_received(:write_message)
+          promise.fulfill('BAZFOO')
+          peer.should have_received(:write_message).with('BAZFOO', 42)
+        end
+
+        it 'uses the codec to encode the response' do
+          codec.stub(:encode).with('BAZFOO', 42).and_return('42BAZFOO')
+          server.override_handle_message { Future.resolved('BAZFOO') }
+          peer = server.connections.first
+          peer.handle_message('FOOBAZ', 42)
+          raw_connection.should have_received(:write).with('42BAZFOO')
         end
       end
     end
@@ -92,23 +154,29 @@ end
 
 module ServerSpec
   class TestServer < Ione::Rpc::Server
-    attr_reader :created_connections
+    attr_reader :connections, :received_messages
 
     def initialize(*)
       super
-      @created_connections = []
+      @connections = []
+      @received_messages = []
     end
 
-    def create_connection(connection)
-      @created_connections << connection
+    def handle_connection(peer)
+      @connections << peer
     end
-  end
 
-  class TestConnection
-    attr_reader :raw_connection
+    def override_handle_message(&handler)
+      @message_handler = handler
+    end
 
-    def initialize(connection)
-      @raw_connection = connection
+    def handle_message(request, channel, peer)
+      @received_messages << [request, channel, peer]
+      if @message_handler
+        @message_handler.call(request, channel, peer)
+      else
+        super
+      end
     end
   end
 end
