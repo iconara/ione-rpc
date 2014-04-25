@@ -15,15 +15,35 @@ module Ione
     # The client will handle connections to multiple server peers, and
     # automatically reconnect to them when they disconnect.
     class Client
-      def initialize(hosts, codec, options={})
-        @hosts = hosts
+      # Create a new client with the specified codec and options.
+      #
+      # @param [Object] codec the protocol codec to use to encode requests and
+      #   decode responses.
+      # @param [Hash] options
+      # @option options [Array<String>] :hosts the host (and ports) to connect
+      #   to, specified either as an array of host (String) and port (Integer)
+      #   pairs (e.g. `[['host1', 1111], [`host2`, 2222]]`) or an array of
+      #   strings on the format host:port (e.g. `['host1:1111', 'host2:2222']`).
+      # @option options [Ione::Io::IoReactor] :io_reactor use this option to
+      #   make the client use an existing IO reactor and not create its own.
+      #   Please note that {#stop} will still stop the reactor.
+      # @option options [Integer] :connection_timeout (5) the number of seconds
+      #   to wait for connections to be established before failing.
+      # @option options [Integer] :max_channels (128) the maximum number of
+      #   channels supported for each connection.
+      # @option options [Logger] :logger a logger conforming to the standard
+      #   Ruby logger API that will be used to log significant events like
+      #   request failures.
+      def initialize(codec, options={})
         @codec = codec
         @lock = Mutex.new
         @connection_timeout = options[:connection_timeout] || 5
         @io_reactor = options[:io_reactor] || Io::IoReactor.new
         @max_channels = options[:max_channels] || 128
         @logger = options[:logger]
+        @hosts = []
         @connections = []
+        Array(options[:hosts]).each { |h| add_host(*h) }
       end
 
       # A client is connected when it has at least one open connection.
@@ -52,6 +72,26 @@ module Ione
       def stop
         @lock.synchronize { @connections = [] }
         @io_reactor.stop.map(self)
+      end
+
+      # Add an additional host to connect to. This can be done either before
+      # or after the client is started.
+      #
+      # @param [String] host the host to connect to, or the host:port pair (in
+      #   which case the port parameter should be `nil`).
+      # @param [Integer] port the host to connect to, or `nil` if the host is
+      #   a string on the format host:port.
+      def add_host(host, port=nil)
+        @lock.synchronize do
+          if port.nil?
+            host, port = host.split(':')
+          end
+          @hosts << [host, port.to_i]
+        end
+        if @io_reactor.running?
+          connect(host, port)
+        end
+        self
       end
 
       # Send a request to a server peer. The peer chosen is determined by the
@@ -144,11 +184,8 @@ module Ione
       private
 
       def connect_all
-        futures = @hosts.map do |host|
-          host, port = host.split(':')
-          port = port.to_i
-          connect(host, port)
-        end
+        hosts = @lock.synchronize { @hosts.dup }
+        futures = hosts.map { |host, port| connect(host, port) }
         Future.all(*futures)
       end
 

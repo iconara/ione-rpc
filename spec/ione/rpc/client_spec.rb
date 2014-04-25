@@ -7,7 +7,11 @@ module Ione
   module Rpc
     describe Client do
       let :client do
-        ClientSpec::TestClient.new(%w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543], codec, io_reactor: io_reactor, logger: logger, connection_timeout: 7)
+        ClientSpec::TestClient.new(codec, io_reactor: io_reactor, logger: logger, connection_timeout: 7, hosts: hosts)
+      end
+
+      let :hosts do
+        %w[node0.example.com:4321 node1.example.com:5432 node2.example.com:6543]
       end
 
       let :io_reactor do
@@ -66,6 +70,14 @@ module Ione
           io_reactor.should have_received(:connect).with('node0.example.com', 4321, 7)
           io_reactor.should have_received(:connect).with('node1.example.com', 5432, 7)
           io_reactor.should have_received(:connect).with('node2.example.com', 6543, 7)
+        end
+
+        it 'accepts the hosts and ports as an array of pairs' do
+          hosts = [['node0.example.com', 4321], ['node1.example.com', '5432']]
+          client = ClientSpec::TestClient.new(codec, hosts: hosts, io_reactor: io_reactor, logger: logger, connection_timeout: 7)
+          client.start.value
+          io_reactor.should have_received(:connect).with('node0.example.com', 4321, 7)
+          io_reactor.should have_received(:connect).with('node1.example.com', 5432, 7)
         end
 
         it 'creates a protocol handler for each connection' do
@@ -228,6 +240,33 @@ module Ione
           io_reactor.stub(:connect).and_return(Future.failed(StandardError.new('BORK')))
           client.created_connections.each { |connection| connection.closed_listener.call }
           client.should_not be_connected
+        end
+      end
+
+      describe '#add_host' do
+        it 'returns self' do
+          client.add_host('new.example.com', 3333).should equal(client)
+        end
+
+        it 'connects to the host when the client starts starting' do
+          client.add_host('new.example.com', 3333)
+          io_reactor.should_not have_received(:connect)
+          client.start.value
+          io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
+        end
+
+        it 'connects to the host immediately when the client is already started' do
+          client.start.value
+          io_reactor.should_not have_received(:connect).with('new.example.com', 3333, anything)
+          client.add_host('new.example.com', 3333)
+          io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
+        end
+
+        it 'accepts a single host:port string' do
+          client.add_host('new.example.com:3333')
+          io_reactor.should_not have_received(:connect)
+          client.start.value
+          io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
         end
       end
 
