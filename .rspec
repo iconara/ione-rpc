@@ -1,5 +1,5 @@
 -I lib
--I examples/simple/lib
+-I examples/simple_rpc/lib
 --color
 --format doc
 --pattern 'spec/**/*_spec.rb,examples/*/spec/**/*_spec.rb'
