@@ -4,10 +4,10 @@
 $: << File.expand_path('../../../../lib', __FILE__)
 $: << File.expand_path('../../lib', __FILE__)
 
-require 'ione/simple'
+require 'ione/simple_rpc'
 
 
-server = Ione::SimpleServer.new(3141)
+server = Ione::SimpleRpcServer.new(3141)
 server.start.value
 
 sleep

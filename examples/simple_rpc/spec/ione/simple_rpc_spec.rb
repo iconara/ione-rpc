@@ -1,10 +1,10 @@
 # encoding: utf-8
 
 require 'spec_helper'
-require 'ione/simple'
+require 'ione/simple_rpc'
 
 
-describe 'A simple client/server protocol setup' do
+describe 'A simple client/server RPC protocol setup' do
   let :io_reactor do
     Ione::Io::IoReactor.new
   end
@@ -19,13 +19,13 @@ describe 'A simple client/server protocol setup' do
 
   let :servers do
     Array.new(3) do |i|
-      Ione::SimpleServer.new(server_base_port + i, io_reactor: io_reactor)
+      Ione::SimpleRpcServer.new(server_base_port + i, io_reactor: io_reactor)
     end
   end
 
   let :client do
     hosts = servers.map { |s| "localhost:#{s.port}" }
-    Ione::SimpleClient.new(io_reactor: io_reactor, hosts: hosts)
+    Ione::SimpleRpcClient.new(io_reactor: io_reactor, hosts: hosts)
   end
 
   before do

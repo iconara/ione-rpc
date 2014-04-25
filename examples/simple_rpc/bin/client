@@ -4,12 +4,12 @@
 $: << File.expand_path('../../../../lib', __FILE__)
 $: << File.expand_path('../../lib', __FILE__)
 
-require 'ione/simple'
+require 'ione/simple_rpc'
 
 
 abort 'Usage: client pi|tau' unless %w[pi tau].include?(ARGV.first)
 
-client = Ione::SimpleClient.new(hosts: %w[localhost:3141])
+client = Ione::SimpleRpcClient.new(hosts: %w[localhost:3141])
 
 response = client.start.flat_map do
   case ARGV.first

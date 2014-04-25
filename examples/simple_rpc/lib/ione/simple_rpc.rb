@@ -17,7 +17,7 @@ module Ione
 
   # This is the server component, you need to create an instance of this class
   # and call #start to run it (see bin/server for an example).
-  class SimpleServer < Ione::Rpc::Server
+  class SimpleRpcServer < Ione::Rpc::Server
     def initialize(port, options={})
       # The server needs to know which port to listen on, and which codec to use
       # to decode requests and encode responses. The codec must be the same for
@@ -55,7 +55,7 @@ module Ione
   # give it the host and port of the server(s) and call #start on it to make it
   # connect. Then you can call the #pi and #tau methods to send messages to the
   # server(s).
-  class SimpleClient < Ione::Rpc::Client
+  class SimpleRpcClient < Ione::Rpc::Client
     def initialize(options={})
       super(CODEC, options)
     end

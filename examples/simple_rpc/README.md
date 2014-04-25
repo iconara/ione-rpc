@@ -4,6 +4,6 @@ This example shows how you can create a client and server that communicate using
 
 ## How to run
 
-Start the server by running `./examples/simple/bin/server`, and then run the client in another terminal with `./examples/simple/bin/client pi` or `./examples/simple/bin/client tau`.
+Start the server by running `./examples/simple_rpc/bin/server`, and then run the client in another terminal with `./examples/simple_rpc/bin/client pi` or `./examples/simple/bin/client tau`.
 
-Run the tests with `rspec examples/simple/spec/ione/simple_spec.rb`
+Run the tests with `rspec examples/simple_rpc/spec/ione/simple_rpc_spec.rb`

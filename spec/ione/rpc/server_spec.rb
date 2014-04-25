@@ -147,6 +147,8 @@ module Ione
           peer.handle_message('FOOBAZ', 42)
           raw_connection.should have_received(:write).with('42BAZFOO')
         end
+
+        it 'handles that the server fails to process the request'
       end
     end
   end
