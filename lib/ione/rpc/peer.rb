@@ -2,6 +2,7 @@
 
 module Ione
   module Rpc
+    # @private
     class Peer
       attr_reader :host, :port
 

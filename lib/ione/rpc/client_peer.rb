@@ -5,6 +5,7 @@ require 'ione'
 
 module Ione
   module Rpc
+    # @private
     class ClientPeer < Peer
       def initialize(connection, codec, max_channels)
         super(connection, codec)
