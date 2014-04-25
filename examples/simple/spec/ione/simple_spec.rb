@@ -23,23 +23,33 @@ describe 'A simple client/server protocol setup' do
     end
   end
 
-  let :clients do
+  let :client do
     hosts = servers.map { |s| "localhost:#{s.port}" }
-    Array.new(5) do
-      Ione::SimpleClient.new(io_reactor: io_reactor, hosts: hosts)
-    end
+    Ione::SimpleClient.new(io_reactor: io_reactor, hosts: hosts)
   end
 
   before do
-    Ione::Future.all(*servers.map(&:start)).value
-    Ione::Future.all(*clients.map(&:start)).value
+    Ione::Future.all(*servers.map(&:start), client.start).value
   end
 
-  it 'sends requests and receives messages' do
-    futures = clients.map do |client|
-      client.send_request('foo' => 'bar')
+  describe '#pi' do
+    it 'returns an approximate value of π' do
+      future = client.pi
+      future.value.should be_within(0.000000000000001).of(Math::PI)
     end
-    responses = Ione::Future.all(*futures).value
-    responses.should == Array.new(clients.size) { {'hello' => 'world'} }
+  end
+
+  describe '#tau' do
+    it 'returns an approximate value of τ' do
+      future = client.tau
+      future.value.should be_within(0.000000000000001).of(Math::PI * 2)
+    end
+  end
+
+  context 'when the client sends something that the server doesn\'t understand' do
+    it 'responds with an error message' do
+      future = client.send_request('α')
+      future.value.should eql('error' => 'wat?')
+    end
   end
 end
