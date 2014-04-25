@@ -3,3 +3,5 @@
 /pkg
 /tmp
 /.ruby-*
+/doc
+/.yardoc
