@@ -38,20 +38,12 @@ module Ione
           @buffer.read(@length)
         end
 
-        def <<(data)
-          @buffer << data
-        end
-
         def header_ready?
           @length.nil? && @buffer.size >= 5
         end
 
         def body_ready?
           @length && @buffer.size >= @length
-        end
-
-        def partial?
-          @body.nil?
         end
       end
     end
