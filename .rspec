@@ -1,5 +1,5 @@
+-I lib
+-I examples/simple/lib
 --color
 --format doc
---tty
--Ilib
-spec
+--pattern 'spec/**/*_spec.rb,examples/*/spec/**/*_spec.rb'
