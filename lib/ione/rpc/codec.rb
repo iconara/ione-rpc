@@ -22,7 +22,7 @@ module Ione
       # @return [String]
       def encode(message, channel)
         data = encode_message(message)
-        [1, channel, data.bytesize, data].pack('ccNa*')
+        [1, channel, data.bytesize, data.to_s].pack('ccNa*')
       end
 
       # Decodes a frame, piece by piece if necessary.
