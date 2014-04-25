@@ -27,7 +27,7 @@ module Ione
       def handle_connection(peer)
       end
 
-      def handle_message(message, channel, peer)
+      def handle_message(message, peer)
         Future.resolved
       end
 
@@ -48,7 +48,7 @@ module Ione
         end
 
         def handle_message(message, channel)
-          f = @server.handle_message(message, channel, self)
+          f = @server.handle_message(message, self)
           f.on_value do |response|
             write_message(response, channel)
           end

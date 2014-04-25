@@ -126,7 +126,7 @@ module Ione
 
         it 'calls #handle_message with request' do
           server.connections.first.handle_message('FOOBAZ', 42)
-          server.received_messages.first.should == ['FOOBAZ', 42, server.connections.first]
+          server.received_messages.first.should == ['FOOBAZ', server.connections.first]
         end
 
         it 'responds to the same peer and channel when the future returned by #handle_message is resolved' do
@@ -170,10 +170,10 @@ module ServerSpec
       @message_handler = handler
     end
 
-    def handle_message(request, channel, peer)
-      @received_messages << [request, channel, peer]
+    def handle_message(request, peer)
+      @received_messages << [request, peer]
       if @message_handler
-        @message_handler.call(request, channel, peer)
+        @message_handler.call(request, peer)
       else
         super
       end
