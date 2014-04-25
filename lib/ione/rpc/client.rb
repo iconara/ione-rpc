@@ -18,7 +18,7 @@ module Ione
       # Create a new client with the specified codec and options.
       #
       # @param [Object] codec the protocol codec to use to encode requests and
-      #   decode responses.
+      #   decode responses. See {Ione::Rpc::Codec}.
       # @param [Hash] options
       # @option options [Array<String>] :hosts the host (and ports) to connect
       #   to, specified either as an array of host (String) and port (Integer)
