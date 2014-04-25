@@ -353,7 +353,9 @@ module ClientSpec
     end
 
     def initialize_connection(connection)
-      send_request('STARTUP', connection)
+      super.flat_map do
+        send_request('STARTUP', connection)
+      end
     end
   end
 
