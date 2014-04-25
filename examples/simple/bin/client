@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+
+$: << File.expand_path('../../../../lib', __FILE__)
+$: << File.expand_path('../../lib', __FILE__)
+
+require 'ione/simple'
+
+
+abort 'Usage: client pi|tau' unless %w[pi tau].include?(ARGV.first)
+
+client = Ione::SimpleClient.new(hosts: %w[localhost:3141])
+
+response = client.start.flat_map do
+  case ARGV.first
+  when 'pi' then client.pi
+  when 'tau' then client.tau
+  end
+end
+
+puts response.value
