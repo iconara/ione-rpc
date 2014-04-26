@@ -1,4 +1,5 @@
 --no-private
+--protected
 --markup markdown
 lib/**/*.rb
 -- README
