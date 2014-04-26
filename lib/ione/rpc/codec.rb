@@ -103,7 +103,7 @@ module Ione
         end
 
         def header_ready?
-          @length.nil? && @buffer.size >= 5
+          @length.nil? && @buffer.size >= 6
         end
 
         def body_ready?
