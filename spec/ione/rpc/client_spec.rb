@@ -268,6 +268,15 @@ module Ione
           client.start.value
           io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
         end
+
+        it 'does nothing if the host was already known' do
+          client.add_host('new.example.com:3333')
+          client.add_host('new.example.com:3333')
+          client.start.value
+          io_reactor.should have_received(:connect).with('new.example.com', 3333, 7).once
+          client.add_host('new.example.com:3333')
+          io_reactor.should have_received(:connect).with('new.example.com', 3333, 7).once
+        end
       end
 
       context 'when disconnected' do

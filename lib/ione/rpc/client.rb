@@ -82,11 +82,16 @@ module Ione
       # @param [Integer] port the host to connect to, or `nil` if the host is
       #   a string on the format host:port.
       def add_host(host, port=nil)
+        if port.nil?
+          host, port = host.split(':')
+        end
+        port = port.to_i
         @lock.synchronize do
-          if port.nil?
-            host, port = host.split(':')
+          if @hosts.none? { |h, p| h == host && p == port }
+            @hosts << [host, port]
+          else
+            return
           end
-          @hosts << [host, port.to_i]
         end
         if @io_reactor.running?
           connect(host, port)
