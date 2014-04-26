@@ -7,23 +7,44 @@ module Ione
   module Rpc
     describe Server do
       let :server do
-        ServerSpec::TestServer.new(4321, codec, io_reactor: io_reactor)
+        ServerSpec::TestServer.new(4321, codec, io_reactor: io_reactor, logger: logger)
       end
 
       let :codec do
         double(:codec)
       end
 
+      let :logger do
+        double(:logger)
+      end
+
+      let :acceptor do
+        double(:acceptor)
+      end
+
       let :io_reactor do
-        r = double(:io_reactor)
-        r.stub(:start).and_return(Ione::Future.resolved(r))
-        r.stub(:stop).and_return(Ione::Future.resolved(r))
-        r.stub(:bind).and_return(Ione::Future.resolved)
-        r
+        double(:io_reactor)
+      end
+
+      before do
+        io_reactor.stub(:start).and_return(Ione::Future.resolved(io_reactor))
+        io_reactor.stub(:stop).and_return(Ione::Future.resolved(io_reactor))
+        io_reactor.stub(:bind) do |*args, &callback|
+          callback.call(acceptor)
+          Ione::Future.resolved
+        end
+      end
+
+      before do
+        acceptor.stub(:on_accept)
       end
 
       before do
         codec.stub(:encode) { |msg, _| msg }
+      end
+
+      before do
+        logger.stub(:info)
       end
 
       describe '#port' do
@@ -58,6 +79,11 @@ module Ione
         it 'returns a future that resolves to the server' do
           server.start.value.should equal(server)
         end
+
+        it 'logs the address and port when listening for connections' do
+          server.start.value
+          logger.should have_received(:info).with('Server listening for connections on 0.0.0.0:4321')
+        end
       end
 
       describe '#stop' do
@@ -82,20 +108,15 @@ module Ione
 
         before do
           raw_connection.stub(:on_data)
-          raw_connection.stub(:on_closed)
+          raw_connection.stub(:on_closed) { |&listener| raw_connection.stub(:closed_listener).and_return(listener) }
           raw_connection.stub(:host).and_return('client.example.com')
           raw_connection.stub(:port).and_return(34534)
           raw_connection.stub(:write)
         end
 
         before do
-          acceptor = double(:acceptor)
           acceptor.stub(:on_accept) do |&listener|
             accept_listeners << listener
-          end
-          io_reactor.stub(:bind) do |&callback|
-            callback.call(acceptor)
-            Ione::Future.resolved
           end
         end
 
@@ -114,6 +135,15 @@ module Ione
         it 'calls #handle_connection with the client connection' do
           server.connections.should have(1).item
           server.connections.first.host.should == raw_connection.host
+        end
+
+        it 'logs that a client connected' do
+          logger.should have_received(:info).with('Connection from client.example.com:34534 accepted')
+        end
+
+        it 'logs when the client is disconnected' do
+          raw_connection.closed_listener.call
+          logger.should have_received(:info).with('Connection from client.example.com:34534 closed')
         end
       end
 

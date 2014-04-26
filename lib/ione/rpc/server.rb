@@ -17,6 +17,7 @@ module Ione
         @stop_reactor = !options[:io_reactor]
         @queue_length = options[:queue_size] || 5
         @bind_address = options[:bind_address] || '0.0.0.0'
+        @logger = options[:logger]
       end
 
       # Start listening for client connections. This also starts the IO reactor
@@ -69,8 +70,14 @@ module Ione
 
       def setup_server
         @io_reactor.bind(@bind_address, @port, @queue_length) do |acceptor|
+          @logger.info('Server listening for connections on %s:%d' % [@bind_address, @port]) if @logger
           acceptor.on_accept do |connection|
-            handle_connection(ServerPeer.new(connection, @codec, self))
+            @logger.info('Connection from %s:%d accepted' % [connection.host, connection.port]) if @logger
+            peer = ServerPeer.new(connection, @codec, self)
+            peer.on_closed do
+              @logger.info('Connection from %s:%d closed' % [connection.host, connection.port]) if @logger
+            end
+            handle_connection(peer)
           end
         end
       end
