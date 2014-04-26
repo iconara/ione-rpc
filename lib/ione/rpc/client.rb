@@ -77,26 +77,47 @@ module Ione
       # Add an additional host to connect to. This can be done either before
       # or after the client is started.
       #
-      # @param [String] host the host to connect to, or the host:port pair (in
+      # @param [String] hostname the host to connect to, or the host:port pair (in
       #   which case the port parameter should be `nil`).
       # @param [Integer] port the host to connect to, or `nil` if the host is
       #   a string on the format host:port.
-      def add_host(host, port=nil)
-        if port.nil?
-          host, port = host.split(':')
-        end
-        port = port.to_i
+      # @return [Boolean] true when the host was added, false if it had already
+      #   been added.
+      def add_host(hostname, port=nil)
+        hostname, port = normalize_address(hostname, port)
         @lock.synchronize do
-          if @hosts.none? { |h, p| h == host && p == port }
-            @hosts << [host, port]
+          if @hosts.none? { |h, p| h == hostname && p == port }
+            @hosts << [hostname, port]
           else
-            return
+            return false
           end
         end
         if @io_reactor.running?
-          connect(host, port)
+          connect(hostname, port)
         end
-        self
+        true
+      end
+
+      # Remove a host and disconnect any connections to it. This can be done
+      # either before or after the client is started.
+      #
+      # @param [String] hostname the host to connect to, or the host:port pair (in
+      #   which case the port parameter should be `nil`).
+      # @param [Integer] port the host to connect to, or `nil` if the host is
+      #   a string on the format host:port.
+      # @return [Boolean] true when the host was removed, false if it was not
+      #   found.
+      def remove_host(hostname, port=nil)
+        hostname, port = normalize_address(hostname, port)
+        @lock.synchronize do
+          unless @hosts.delete([hostname, port])
+            return false
+          end
+          if (connection = @connections.find { |c| c.host == hostname && c.port == port })
+            connection.close
+          end
+        end
+        true
       end
 
       # Send a request to a server peer. The peer chosen is determined by the
@@ -207,7 +228,13 @@ module Ione
             next_timeout = [timeout * 2, max_timeout].min
             @logger.warn('Failed connecting to %s:%d, will try again in %ds' % [host, port, timeout]) if @logger
             ff = @io_reactor.schedule_timer(timeout)
-            ff.flat_map { connect(host, port, next_timeout) }
+            ff.flat_map do
+              if connect?(host, port)
+                connect(host, port, next_timeout)
+              else
+                @logger.info('Not reconnecting to %s:%d' % [host, port]) if @logger
+              end
+            end
           end
           f.flat_map do |connection|
             initialize_connection(connection).map(connection)
@@ -224,7 +251,16 @@ module Ione
       def handle_connected(connection)
         @logger.info('Connected to %s:%d' % [connection.host, connection.port]) if @logger
         connection.on_closed { |error| handle_disconnected(connection, error) }
-        @lock.synchronize { @connections << connection }
+        if connect?(connection.host, connection.port)
+          @lock.synchronize { @connections << connection }
+        else
+          connection.close
+        end
+      end
+
+      def connect?(host, port)
+        hosts = @lock.synchronize { @hosts.dup }
+        hosts.any? { |h, p| h == host && p == port }
       end
 
       def handle_disconnected(connection, error=nil)
@@ -236,6 +272,14 @@ module Ione
         end
         @lock.synchronize { @connections.delete(connection) }
         connect(connection.host, connection.port) if error
+      end
+
+      def normalize_address(host, port)
+        if port.nil?
+          host, port = host.split(':')
+        end
+        port = port.to_i
+        return host, port
       end
     end
   end

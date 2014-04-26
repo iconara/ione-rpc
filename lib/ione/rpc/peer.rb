@@ -22,6 +22,10 @@ module Ione
         @closed_promise.future.on_value(&listener)
       end
 
+      def close
+        @connection.close
+      end
+
       protected
 
       def handle_data(new_data)

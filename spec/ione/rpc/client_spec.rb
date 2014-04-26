@@ -48,6 +48,7 @@ module Ione
         connection.stub(:on_data)
         connection.stub(:on_closed)
         connection.stub(:write)
+        connection.stub(:close)
         connection
       end
 
@@ -244,11 +245,7 @@ module Ione
       end
 
       describe '#add_host' do
-        it 'returns self' do
-          client.add_host('new.example.com', 3333).should equal(client)
-        end
-
-        it 'connects to the host when the client starts starting' do
+        it 'connects to the host when the client starts' do
           client.add_host('new.example.com', 3333)
           io_reactor.should_not have_received(:connect)
           client.start.value
@@ -269,13 +266,87 @@ module Ione
           io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
         end
 
-        it 'does nothing if the host was already known' do
+        it 'does not connect again if the host was already known' do
           client.add_host('new.example.com:3333')
           client.add_host('new.example.com:3333')
           client.start.value
           io_reactor.should have_received(:connect).with('new.example.com', 3333, 7).once
           client.add_host('new.example.com:3333')
           io_reactor.should have_received(:connect).with('new.example.com', 3333, 7).once
+        end
+
+        it 'returns true when the host is not known' do
+          client.add_host('new.example.com:3333').should be_true
+        end
+
+        it 'returns false when the host was already known' do
+          client.add_host('new.example.com:3333')
+          client.add_host('new.example.com:3333').should be_false
+        end
+      end
+
+      describe '#remove_host' do
+        it 'returns true when the host is known' do
+          client.add_host('new.example.com:3333')
+          client.remove_host('new.example.com:3333').should be_true
+        end
+
+        it 'returns false when the host was not known' do
+          client.remove_host('new.example.com:3333').should be_false
+        end
+
+        it 'does not connect to the host when the client starts' do
+          client.remove_host('node0.example.com', 4321)
+          client.start.value
+          io_reactor.should_not have_received(:connect).with('node0.example.com', 4321, anything)
+        end
+
+        it 'disconnects from the host when client has started' do
+          client.start.value
+          client.remove_host('node0.example.com', 4321)
+          io_reactor.should have_received(:connect).with('node0.example.com', 4321, anything)
+          connection = client.created_connections.find { |c| c.host == 'node0.example.com' }
+          connection.should be_closed
+        end
+
+        context 'when the connection had already closed, but not reconnected' do
+          let :timer_promise do
+            Promise.new
+          end
+
+          before do
+            client.start.value
+            io_reactor.stub(:schedule_timer).and_return(timer_promise.future)
+            io_reactor.stub(:connect).with('node0.example.com', 4321, anything).and_return(Future.failed(StandardError.new('BORK')))
+            connection = client.created_connections.find { |c| c.host == 'node0.example.com' }
+            connection.closed_listener.call(StandardError.new('BORK'))
+            client.remove_host('node0.example.com', 4321)
+            timer_promise.fulfill
+          end
+
+          it 'stops the reconnection attempts' do
+            io_reactor.should have_received(:connect).with('node0.example.com', 4321, anything).twice
+          end
+
+          it 'logs that it stopped attempting to reconnect' do
+            logger.should have_received(:info).with('Not reconnecting to node0.example.com:4321')
+          end
+        end
+
+        context 'when the connection is being established' do
+          it 'closes the connection' do
+            connection_promise = Promise.new
+            connection_creation_block = nil
+            io_reactor.stub(:connect).with('node0.example.com', 4321, anything) do |_, _, _, &block|
+              connection_creation_block = block
+              connection_promise.future
+            end
+            client.start
+            client.remove_host('node0.example.com', 4321)
+            connection = create_raw_connection('node0.example.com', 4321)
+            connection_promise.fulfill(connection_creation_block.call(connection))
+            connection.should have_received(:close)
+          end
         end
       end
 
@@ -414,6 +485,15 @@ module ClientSpec
       @raw_connection = raw_connection
       @peer_connection = peer_connection
       @requests = []
+    end
+
+    def closed?
+      !!@closed
+    end
+
+    def close
+      @closed = true
+      @peer_connection.close
     end
 
     def on_closed(&listener)

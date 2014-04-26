@@ -99,6 +99,17 @@ shared_examples 'peers' do
       cause.should == StandardError.new('foo')
     end
   end
+
+  context 'when closed' do
+    before do
+      connection.stub(:close)
+    end
+
+    it 'closes the connection' do
+      peer.close
+      connection.should have_received(:close)
+    end
+  end
 end
 
 module RpcSpec
