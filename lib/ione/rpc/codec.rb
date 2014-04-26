@@ -3,7 +3,8 @@
 module Ione
   module Rpc
     # Codecs are used to encode and decode the messages sent between the client
-    # and server.
+    # and server. Codecs must be able to decode frames in a streaming fashion,
+    # i.e. frames that come in pieces.
     #
     # If you want to control how messages are framed you can implement your
     # own codec from scratch by implementing {#encode} and {#decode}, but most
@@ -13,13 +14,18 @@ module Ione
     # implement {#encode} and {#decode} you don't need to subclass this class.
     #
     # Codecs must be stateless.
+    #
+    # Codecs must also make sure that these (conceptual) invariants hold:
+    # `decode(encode(message, channel)) == [message, channel]` and
+    # `encode(decode(frame)) == frame` (the return values are not entirely
+    # compatible, but the concept should be clear).
     class Codec
       # Encodes a frame with a header that includes the frame size and channel,
       # and the message as body.
       #
-      # @param [Object] message
-      # @param [Integer] channel
-      # @return [String]
+      # @param [Object] message the message to encode
+      # @param [Integer] channel the channel to encode into the frame
+      # @return [String] an encoded frame with the message and channel
       def encode(message, channel)
         data = encode_message(message)
         [1, channel, data.bytesize, data.to_s].pack('ccNa*')
@@ -46,15 +52,21 @@ module Ione
       # true, the second argument will be whatever was returned by the previous
       # call.
       #
-      # @param [Ione::ByteBuffer] buffer
+      # The buffer might contain more bytes than needed to decode a frame, and
+      # the implementation must not consume these. The implementation must
+      # consume all of the bytes of the current frame, but none of the bytes of
+      # the next frame.
+      #
+      # @param [Ione::ByteBuffer] buffer the byte buffer that contains the frame
+      #   data. The byte buffer is owned by the caller and should only be read from.
       # @param [Object, nil] state the first value returned from the previous
       #   call, unless the previous call resulted in a completely decoded frame,
       #   in which case it is nil
-      # @return [Array<Object>] three values where the last is true when a
-      #   frame could be completely decoded. When the last value is true the
-      #   first value is the decoded message and the second the channel, but when
-      #   the last value is false the first is the partial state (see the `state`
-      #   parameter) and the second is nil.
+      # @return [Array<Object, Integer, Boolean>] three values where the last is
+      #   true when a frame could be completely decoded. When the last value is
+      #   true the first value is the decoded message and the second the channel,
+      #   but when the last value is false the first is the partial state (see
+      #   the `state` parameter) and the second is nil.
       def decode(buffer, state)
         state ||= State.new(buffer)
         if state.header_ready?
@@ -122,6 +134,7 @@ module Ione
     # @example A codec that encodes messages as MessagePack
     #   codec = StandardCodec.new(MessagePack)
     class StandardCodec < Codec
+      # @param [#load, #dump] delegate
       def initialize(delegate)
         @delegate = delegate
       end
