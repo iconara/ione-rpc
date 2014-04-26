@@ -4,10 +4,13 @@
 $: << File.expand_path('../../../../lib', __FILE__)
 $: << File.expand_path('../../lib', __FILE__)
 
+require 'logger'
 require 'ione/simple_rpc'
 
 
-server = Ione::SimpleRpcServer.new(3141)
+port = 3141
+logger = Logger.new($stderr)
+server = Ione::SimpleRpcServer.new(port, logger: logger)
 server.start.value
 
 sleep
