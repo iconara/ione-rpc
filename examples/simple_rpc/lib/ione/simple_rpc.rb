@@ -30,7 +30,7 @@ module Ione
     # return a future that contains the response to send back to the client.
     # The method takes two parameters: the message and the connection it was
     # received on, but most of the time you only need the first.
-    def handle_message(message, _)
+    def handle_request(message, _)
       response = begin
         case message
         when 'π'

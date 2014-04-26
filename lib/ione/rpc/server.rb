@@ -5,7 +5,7 @@ module Ione
     # This is the base class of server peers.
     #
     # To implement a server you need to create a subclass of this class and
-    # implement {#handle_message}. You can also optionally implement
+    # implement {#handle_request}. You can also optionally implement
     # {#handle_connection} to do initialization when a new client connects.
     class Server
       attr_reader :port
@@ -61,7 +61,7 @@ module Ione
       # @param [#host, #port, #on_closed] connection the client connection that
       #   received the message
       # @return [Ione::Future<Object>] a future that will resolve to the response.
-      def handle_message(message, connection)
+      def handle_request(message, connection)
         Future.resolved
       end
 
@@ -83,7 +83,7 @@ module Ione
         end
 
         def handle_message(message, channel)
-          f = @server.handle_message(message, self)
+          f = @server.handle_request(message, self)
           f.on_value do |response|
             write_message(response, channel)
           end

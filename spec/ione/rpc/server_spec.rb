@@ -124,14 +124,14 @@ module Ione
           accept_listeners.first.call(raw_connection)
         end
 
-        it 'calls #handle_message with request' do
+        it 'calls #handle_request with the request' do
           server.connections.first.handle_message('FOOBAZ', 42)
           server.received_messages.first.should == ['FOOBAZ', server.connections.first]
         end
 
-        it 'responds to the same peer and channel when the future returned by #handle_message is resolved' do
+        it 'responds to the same peer and channel when the future returned by #handle_request is resolved' do
           promise = Promise.new
-          server.override_handle_message { promise.future }
+          server.override_handle_request { promise.future }
           peer = server.connections.first
           peer.stub(:write_message)
           peer.handle_message('FOOBAZ', 42)
@@ -142,7 +142,7 @@ module Ione
 
         it 'uses the codec to encode the response' do
           codec.stub(:encode).with('BAZFOO', 42).and_return('42BAZFOO')
-          server.override_handle_message { Future.resolved('BAZFOO') }
+          server.override_handle_request { Future.resolved('BAZFOO') }
           peer = server.connections.first
           peer.handle_message('FOOBAZ', 42)
           raw_connection.should have_received(:write).with('42BAZFOO')
@@ -168,14 +168,14 @@ module ServerSpec
       @connections << peer
     end
 
-    def override_handle_message(&handler)
-      @message_handler = handler
+    def override_handle_request(&handler)
+      @request_handler = handler
     end
 
-    def handle_message(request, peer)
+    def handle_request(request, peer)
       @received_messages << [request, peer]
-      if @message_handler
-        @message_handler.call(request, peer)
+      if @request_handler
+        @request_handler.call(request, peer)
       else
         super
       end
