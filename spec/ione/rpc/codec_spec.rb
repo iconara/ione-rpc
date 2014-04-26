@@ -89,6 +89,33 @@ module Ione
           channel.should == 42
         end
       end
+
+      context 'when decoding and encoding' do
+        let :message do
+          {'foo' => 'bar', 'baz' => 42}
+        end
+
+        let :channel do
+          42
+        end
+
+        let :frame do
+          %(\x01\x2a\x00\x00\x00\x16{"foo":"bar","baz":42})
+        end
+
+        it 'decoding a encoded frame returns the original message' do
+          frm = codec.encode(message, channel)
+          msg, ch, _ = codec.decode(Ione::ByteBuffer.new(frm), nil)
+          msg.should == message
+          ch.should == channel
+        end
+
+        it 'encoding a message gives the original frame' do
+          msg, ch, _ = codec.decode(Ione::ByteBuffer.new(frame), nil)
+          frm = codec.encode(msg, ch)
+          frm.should == frame
+        end
+      end
     end
 
     describe StandardCodec do
