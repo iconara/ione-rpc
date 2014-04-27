@@ -7,7 +7,7 @@ require 'ione/rpc/version'
 
 Gem::Specification.new do |s|
   s.name          = 'ione-rpc'
-  s.version       = Ione::VERSION.dup
+  s.version       = Ione::Rpc::VERSION.dup
   s.authors       = ['Theo Hultberg']
   s.email         = ['theo@iconara.net']
   s.homepage      = 'http://github.com/iconara/ione-rpc'
