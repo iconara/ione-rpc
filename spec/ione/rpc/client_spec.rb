@@ -217,6 +217,34 @@ module Ione
           client.send_request('PING').value
           codec.should have_received(:encode).with('PING', anything)
         end
+
+        it 'chooses the connection to receive the request randomly' do
+          client.start.value
+          1000.times { client.send_request('PING') }
+          client.created_connections.each do |connection|
+            connection.requests.size.should be_within(50).of(333)
+          end
+        end
+
+        context 'when the client chooses the connection per request' do
+          it 'asks the client to choose a connection to send the request on' do
+            client.override_choose_connection do |connections, request|
+              if request == 'PING'
+                connections[0]
+              elsif request == 'PONG'
+                connections[1]
+              else
+                connections[2]
+              end
+            end
+            client.start.value
+            client.send_request('PING')
+            client.send_request('PING')
+            client.send_request('PONG')
+            startup_requests = 1
+            client.created_connections.map { |c| c.requests.size - startup_requests }.sort.should == [0, 1, 2]
+          end
+        end
       end
 
       describe '#connected?' do
@@ -474,6 +502,18 @@ module ClientSpec
     def initialize_connection(connection)
       super.flat_map do
         send_request('STARTUP', connection)
+      end
+    end
+
+    def override_choose_connection(&chooser)
+      @connection_chooser = chooser
+    end
+
+    def choose_connection(connections, request)
+      if @connection_chooser
+        @connection_chooser.call(connections, request)
+      else
+        super
       end
     end
   end
