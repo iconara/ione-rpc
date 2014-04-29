@@ -290,18 +290,35 @@ module Ione
       end
 
       describe '#add_host' do
-        it 'connects to the host when the client starts' do
-          client.add_host('new.example.com', 3333)
-          io_reactor.should_not have_received(:connect)
-          client.start.value
-          io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
+        context 'when called before the client is started' do
+          it 'connects to the host when the client starts' do
+            client.add_host('new.example.com', 3333)
+            io_reactor.should_not have_received(:connect)
+            client.start.value
+            io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
+          end
+
+          it 'returns a future that resolves to the client when the host has been connected to' do
+            f = client.add_host('new.example.com', 3333)
+            f.should_not be_resolved
+            client.start.value
+            f.value.should equal(client)
+          end
         end
 
-        it 'connects to the host immediately when the client is already started' do
-          client.start.value
-          io_reactor.should_not have_received(:connect).with('new.example.com', 3333, anything)
-          client.add_host('new.example.com', 3333)
-          io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
+        context 'when called after the client has started' do
+          it 'connects to the host immediately' do
+            client.start.value
+            io_reactor.should_not have_received(:connect).with('new.example.com', 3333, anything)
+            client.add_host('new.example.com', 3333)
+            io_reactor.should have_received(:connect).with('new.example.com', 3333, 7)
+          end
+
+          it 'returns a future that resolves to the client when the host has been connected to' do
+            client.start.value
+            f = client.add_host('new.example.com', 3333)
+            f.value.should equal(client)
+          end
         end
 
         it 'accepts a single host:port string' do
@@ -319,25 +336,11 @@ module Ione
           client.add_host('new.example.com:3333')
           io_reactor.should have_received(:connect).with('new.example.com', 3333, 7).once
         end
-
-        it 'returns true when the host is not known' do
-          client.add_host('new.example.com:3333').should be_true
-        end
-
-        it 'returns false when the host was already known' do
-          client.add_host('new.example.com:3333')
-          client.add_host('new.example.com:3333').should be_false
-        end
       end
 
       describe '#remove_host' do
-        it 'returns true when the host is known' do
-          client.add_host('new.example.com:3333')
-          client.remove_host('new.example.com:3333').should be_true
-        end
-
-        it 'returns false when the host was not known' do
-          client.remove_host('new.example.com:3333').should be_false
+        it 'returns a future that resolves to the client future' do
+          client.remove_host('new.example.com:3333').value.should equal(client)
         end
 
         it 'does not connect to the host when the client starts' do

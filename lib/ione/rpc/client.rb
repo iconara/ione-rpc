@@ -81,21 +81,24 @@ module Ione
       #   which case the port parameter should be `nil`).
       # @param [Integer] port the host to connect to, or `nil` if the host is
       #   a string on the format host:port.
-      # @return [Boolean] true when the host was added, false if it had already
-      #   been added.
+      # @return [Ione::Future<Ione::Rpc::Client>] a future that resolves to the
+      #   client when the host has been connected to.
       def add_host(hostname, port=nil)
         hostname, port = normalize_address(hostname, port)
+        promise = nil
         @lock.synchronize do
-          if @hosts.none? { |h, p| h == hostname && p == port }
-            @hosts << [hostname, port]
+          _, _, promise = @hosts.find { |h, p, _| h == hostname && p == port }
+          if promise
+            return promise.future
           else
-            return false
+            promise = Promise.new
+            @hosts << [hostname, port, promise]
           end
         end
         if @io_reactor.running?
-          connect(hostname, port)
+          promise.observe(connect(hostname, port))
         end
-        true
+        promise.future.map(self)
       end
 
       # Remove a host and disconnect any connections to it. This can be done
@@ -105,19 +108,20 @@ module Ione
       #   which case the port parameter should be `nil`).
       # @param [Integer] port the host to connect to, or `nil` if the host is
       #   a string on the format host:port.
-      # @return [Boolean] true when the host was removed, false if it was not
-      #   found.
+      # @return [Ione::Future<Ione::Rpc::Client] a future that resolves to the
+      #   client (immediately, this is mostly to be consistent with #add_host)
       def remove_host(hostname, port=nil)
         hostname, port = normalize_address(hostname, port)
         @lock.synchronize do
-          unless @hosts.delete([hostname, port])
-            return false
-          end
-          if (connection = @connections.find { |c| c.host == hostname && c.port == port })
-            connection.close
+          index = @hosts.index { |h, p, _| h == hostname && p == port }
+          if index
+            @hosts.delete_at(index)
+            if (connection = @connections.find { |c| c.host == hostname && c.port == port })
+              connection.close
+            end
           end
         end
-        true
+        Future.resolved(self)
       end
 
       # Send a request to a server peer. The peer chosen is determined by the
@@ -213,7 +217,11 @@ module Ione
 
       def connect_all
         hosts = @lock.synchronize { @hosts.dup }
-        futures = hosts.map { |host, port| connect(host, port) }
+        futures = hosts.map do |host, port, promise|
+          f = connect(host, port)
+          promise.observe(f)
+          f
+        end
         Future.all(*futures)
       end
 
@@ -262,7 +270,7 @@ module Ione
 
       def connect?(host, port)
         hosts = @lock.synchronize { @hosts.dup }
-        hosts.any? { |h, p| h == host && p == port }
+        hosts.any? { |h, p, _| h == host && p == port }
       end
 
       def handle_disconnected(connection, error=nil)
