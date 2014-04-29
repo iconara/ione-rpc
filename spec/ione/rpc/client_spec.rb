@@ -41,7 +41,6 @@ module Ione
       end
 
       def create_raw_connection(host, port)
-        written_data = ''
         connection = double("connection@#{host}:#{port}")
         connection.stub(:host).and_return(host)
         connection.stub(:port).and_return(port)
