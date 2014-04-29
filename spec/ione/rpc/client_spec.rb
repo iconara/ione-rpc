@@ -238,11 +238,29 @@ module Ione
               end
             end
             client.start.value
-            client.send_request('PING')
-            client.send_request('PING')
-            client.send_request('PONG')
+            client.send_request('PING').value
+            client.send_request('PING').value
+            client.send_request('PONG').value
             startup_requests = 1
             client.created_connections.map { |c| c.requests.size - startup_requests }.sort.should == [0, 1, 2]
+          end
+
+          it 'fails the request when #choose_connection raises an error' do
+            client.override_choose_connection do |connections, request|
+              raise 'Bork'
+            end
+            client.start.value
+            f = client.send_request('PING')
+            expect { f.value }.to raise_error('Bork')
+          end
+
+          it 'fails the request when #choose_connection returns nil' do
+            client.override_choose_connection do |connections, request|
+              nil
+            end
+            client.start.value
+            f = client.send_request('PING')
+            expect { f.value }.to raise_error(Io::ConnectionError)
           end
         end
       end

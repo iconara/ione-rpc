@@ -162,6 +162,8 @@ module Ione
           @logger.warn('Could not send request: not connected') if @logger
           Future.failed(Io::ConnectionError.new('Not connected'))
         end
+      rescue => e
+        Future.failed(e)
       end
 
       protected
