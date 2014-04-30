@@ -213,6 +213,10 @@ module Ione
         connections.sample
       end
 
+      def reconnect?(host, port, attempts)
+        true
+      end
+
       private
 
       def connect_all
@@ -225,7 +229,7 @@ module Ione
         Future.all(*futures)
       end
 
-      def connect(host, port, next_timeout=nil)
+      def connect(host, port, next_timeout=nil, attempts=1)
         if @io_reactor.running?
           @logger.debug('Connecting to %s:%d' % [host, port]) if @logger
           f = @io_reactor.connect(host, port, @connection_timeout) do |connection|
@@ -233,17 +237,18 @@ module Ione
           end
           f.on_value(&method(:handle_connected))
           f = f.fallback do |e|
-            timeout = next_timeout || @connection_timeout
-            max_timeout = @connection_timeout * 10
-            next_timeout = [timeout * 2, max_timeout].min
-            @logger.warn('Failed connecting to %s:%d, will try again in %ds' % [host, port, timeout]) if @logger
-            ff = @io_reactor.schedule_timer(timeout)
-            ff.flat_map do
-              if connect?(host, port)
-                connect(host, port, next_timeout)
-              else
-                @logger.info('Not reconnecting to %s:%d' % [host, port]) if @logger
+            if connect?(host, port) && reconnect?(host, port, attempts)
+              timeout = next_timeout || @connection_timeout
+              max_timeout = @connection_timeout * 10
+              next_timeout = [timeout * 2, max_timeout].min
+              @logger.warn('Failed connecting to %s:%d, will try again in %ds' % [host, port, timeout]) if @logger
+              ff = @io_reactor.schedule_timer(timeout)
+              ff.flat_map do
+                connect(host, port, next_timeout, attempts + 1)
               end
+            else
+              @logger.info('Not reconnecting to %s:%d' % [host, port]) if @logger
+              raise e
             end
           end
           f.flat_map do |connection|

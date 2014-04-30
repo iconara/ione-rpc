@@ -373,7 +373,7 @@ module Ione
           end
 
           it 'stops the reconnection attempts' do
-            io_reactor.should have_received(:connect).with('node0.example.com', 4321, anything).twice
+            io_reactor.should have_received(:connect).with('node0.example.com', 4321, anything).exactly(3).times
           end
 
           it 'logs that it stopped attempting to reconnect' do
@@ -430,6 +430,15 @@ module Ione
           client.start.value
           client.created_connections.find { |c| c.host == 'node1.example.com' }.closed_listener.call
           io_reactor.should have_received(:connect).exactly(3).times
+        end
+
+        it 'does not attempt to reconnect when #reconnect? returns false' do
+          client.reconnect = 2
+          client.start.value
+          io_reactor.stub(:schedule_timer).and_return(Future.resolved)
+          io_reactor.stub(:connect).and_return(Future.failed(StandardError.new('BORK')))
+          client.created_connections.find { |c| c.host == 'node1.example.com' }.closed_listener.call(StandardError.new('BURK'))
+          io_reactor.should have_received(:connect).with('node1.example.com', 5432, anything).exactly(3).times
         end
 
         it 'runs the same connection logic as #connect' do
@@ -532,6 +541,22 @@ module ClientSpec
     def choose_connection(connections, request)
       if @connection_chooser
         @connection_chooser.call(connections, request)
+      else
+        super
+      end
+    end
+
+    def reconnect=(state)
+      @reconnect = state
+    end
+
+    def reconnect?(host, port, attempts)
+      if defined?(@reconnect)
+        if @reconnect.is_a?(Integer)
+          @reconnect > attempts
+        else
+          @reconnect
+        end
       else
         super
       end
