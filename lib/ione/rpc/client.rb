@@ -248,6 +248,7 @@ module Ione
               end
             else
               @logger.info('Not reconnecting to %s:%d' % [host, port]) if @logger
+              remove_host(host, port)
               raise e
             end
           end

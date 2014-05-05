@@ -441,6 +441,18 @@ module Ione
           io_reactor.should have_received(:connect).with('node1.example.com', 5432, anything).exactly(3).times
         end
 
+        it 'allows a manual reconnect after stopping automatic reconnections' do
+          client.reconnect = 1
+          client.start.value
+          io_reactor.stub(:schedule_timer).and_return(Future.resolved)
+          io_reactor.stub(:connect).and_return(Future.failed(StandardError.new('BORK')))
+          client.created_connections.find { |c| c.host == 'node1.example.com' }.closed_listener.call(StandardError.new('BURK'))
+          io_reactor.should have_received(:connect).with('node1.example.com', 5432, anything).exactly(2).times
+          io_reactor.stub(:connect) { |h, p, _, &block| Future.resolved(block.call(create_raw_connection(h, p))) }
+          client.add_host('node1.example.com', 5432).value
+          io_reactor.should have_received(:connect).with('node1.example.com', 5432, anything).exactly(3).times
+        end
+
         it 'runs the same connection logic as #connect' do
           connection_attempts = 0
           connection_attempts_by_host = Hash.new(0)
