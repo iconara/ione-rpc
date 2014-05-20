@@ -1,5 +1,5 @@
 language: ruby
-script: bundle exec rake spec
+script: bundle exec rspec spec
 bundler_args: --without development
 rvm:
   - 1.9.3
