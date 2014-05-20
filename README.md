@@ -110,70 +110,7 @@ end
 
 That's better. It's still callbacks, of sorts, but these compose. `Ione::Future#flat_map` lets you chain asynchronous operations together and get a future that is the result of the last operation. `Ione::Future#map` is the non-asynchronous version that just transforms the result of a future to something else, just like `Array#map`.
 
-If any of the operations in the chain fail the returned future fails and the operations after the failing one are never performed. Here's a more complex example of working with futures, that shows some basic error handling:
-
-```ruby
-all_done_future = update_user_awesomeness('sue@example.com', 8)
-all_done_future.on_value do
-  puts 'All done'
-end
-
-# ...
-
-def update_user_awesomeness(email, new_awesomeness_level)
-  posts_future = @db.execute('SELECT id FROM posts WHERE author = ?', email)
-  # #flat_map composes two asynchronous operations, it returns immediately with a new
-  # future that resolves only when the whole chain of operations is complete.
-  # In other words: the block below will not run now, but when there is a result
-  # from the database query. The future that is returned *represents* the result
-  # of the chain of operations performed on the initial result from the database.
-  posts_future.flat_map do |result|
-    # Don't confuse the #map below with Future#map, this is just a regular
-    # Array#map, transforming each row from the database query into something new.
-    update_futures = result.map do |row|
-      # Each row is used to send another database query, which returns another
-      # future, so the result of this #map block will be an array of futures.
-      update_post_awesomeness(row['id'], new_awesomeness_level)
-    end
-    # The database queries launched in the #map block will all execute in parallel
-    # but we want to know when all of them are done. For this we can use Future.all,
-    # which (surprise!) returns a new future, but one that resolves when *all* of the
-    # source futures resolve – it lets you converge after launching multiple parallel
-    # operations. Future.all transforms a list of futures of values to a future of a
-    # list of values, or in pseudo types: List[Future[V]] -> Future[List[V]].
-    Ione::Futures.all(*update_futures)
-  end
-  # We end up here almost immediately since the #flat_map doesn't run its block,
-  # until it has to. What we return is the return value from the #flat_map call, which is a
-  # future that will eventually resolve when all of the parallel operations we
-  # launched are done
-end
-
-def update_post_awesomeness(id, new_awesomeness_level, retry_attempts=3)
-  f = @db.execute('UPDATE posts SET awesomeness = ? WHERE id = ?', new_awesomeness_level, row['id'
-  # To handle failure we'll use the complement to #flat_map, which is #fallback. When a
-  # future fails, any chained operations will never happen, but sometimes you want to
-  # try again, or do some other operation when an error occurs. For this you can use
-  # #fallback to transform the failed operation into a successful one.
-  f = f.fallback do |error|
-    # Instead of the result of the parent future we get the error, and we can decide
-    # what to do based on whether or not it is fatal or not.
-    if error.is_a?(TryAgainError) && retry_attempts > 0
-      # In this case we want to try again, so we call the method recursively
-      # and decrement the number of remaning retries. This will make sure
-      # that we don't try forever, it's usually a bad idea to never give up.
-      update_post_awesomeness(id, new_awesomeness_level, retry_attempts - 1)
-    else
-      # If you can't recover from the error you can just raise it again and it will be
-      # as if you didn't do anything.
-      raise error
-    end
-  end
-  f
-end
-```
-
-Please refer to [the `Ione::Future` documentation](http://rubydoc.info/gems/ione/frames) for the full story on futures. Coincidentally the code above is more or less how [cql-rb](https://github.com/iconara/cql-rb), the Cassandra driver where Ione came from, works internally (everything but the `TryAgainError`).
+If any of the operations in the chain fail the returned future fails and the operations after the failing one are never performed. There's a more complex example of working with futures further down.
 
 If you don't care about being asynchronous you can use `Ione::Future#value` to wait for the result of a future to be available:
 
@@ -249,6 +186,71 @@ end
 ```
 
 `#initialize_connection` gets the newly established connection as argument and must return a future that resolves when the connection has been properly initialized. You can use the special form of `#send_request` that takes a second argument to send a requets on a specific connection – this is very important, otherwise your initialization message could be sent over another connection, which wouldn't be very useful.
+
+# Working with futures
+
+```ruby
+all_done_future = update_user_awesomeness('sue@example.com', 8)
+all_done_future.on_value do
+  puts 'All done'
+end
+
+# ...
+
+def update_user_awesomeness(email, new_awesomeness_level)
+  posts_future = @db.execute('SELECT id FROM posts WHERE author = ?', email)
+  # #flat_map composes two asynchronous operations, it returns immediately with a new
+  # future that resolves only when the whole chain of operations is complete.
+  # In other words: the block below will not run now, but when there is a result
+  # from the database query. The future that is returned *represents* the result
+  # of the chain of operations performed on the initial result from the database.
+  posts_future.flat_map do |result|
+    # Don't confuse the #map below with Future#map, this is just a regular
+    # Array#map, transforming each row from the database query into something new.
+    update_futures = result.map do |row|
+      # Each row is used to send another database query, which returns another
+      # future, so the result of this #map block will be an array of futures.
+      update_post_awesomeness(row['id'], new_awesomeness_level)
+    end
+    # The database queries launched in the #map block will all execute in parallel
+    # but we want to know when all of them are done. For this we can use Future.all,
+    # which (surprise!) returns a new future, but one that resolves when *all* of the
+    # source futures resolve – it lets you converge after launching multiple parallel
+    # operations. Future.all transforms a list of futures of values to a future of a
+    # list of values, or in pseudo types: List[Future[V]] -> Future[List[V]].
+    Ione::Futures.all(*update_futures)
+  end
+  # We end up here almost immediately since the #flat_map doesn't run its block,
+  # until it has to. What we return is the return value from the #flat_map call, which is a
+  # future that will eventually resolve when all of the parallel operations we
+  # launched are done
+end
+
+def update_post_awesomeness(id, new_awesomeness_level, retry_attempts=3)
+  f = @db.execute('UPDATE posts SET awesomeness = ? WHERE id = ?', new_awesomeness_level, row['id'
+  # To handle failure we'll use the complement to #flat_map, which is #fallback. When a
+  # future fails, any chained operations will never happen, but sometimes you want to
+  # try again, or do some other operation when an error occurs. For this you can use
+  # #fallback to transform the failed operation into a successful one.
+  f = f.fallback do |error|
+    # Instead of the result of the parent future we get the error, and we can decide
+    # what to do based on whether or not it is fatal or not.
+    if error.is_a?(TryAgainError) && retry_attempts > 0
+      # In this case we want to try again, so we call the method recursively
+      # and decrement the number of remaning retries. This will make sure
+      # that we don't try forever, it's usually a bad idea to never give up.
+      update_post_awesomeness(id, new_awesomeness_level, retry_attempts - 1)
+    else
+      # If you can't recover from the error you can just raise it again and it will be
+      # as if you didn't do anything.
+      raise error
+    end
+  end
+  f
+end
+```
+
+Please refer to [the `Ione::Future` documentation](http://rubydoc.info/gems/ione/frames) for the full story on futures. Coincidentally the code above is more or less how [cql-rb](https://github.com/iconara/cql-rb), the Cassandra driver where Ione came from, works internally (everything but the `TryAgainError`).
 
 # How to contribute
 
