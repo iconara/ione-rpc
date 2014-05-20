@@ -12,6 +12,7 @@ group :development do
 end
 
 group :test do
+  gem 'rake'
   gem 'rspec'
   gem 'simplecov'
   gem 'coveralls'

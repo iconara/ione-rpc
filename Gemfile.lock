@@ -18,6 +18,7 @@ GEM
     ione (1.1.0.pre0)
     mime-types (2.2)
     multi_json (1.9.2)
+    rake (0.9.6)
     redcarpet (3.1.1)
     rest-client (1.6.7)
       mime-types (>= 1.16)
@@ -47,6 +48,7 @@ DEPENDENCIES
   coveralls
   ione (= 1.1.0.pre0)
   ione-rpc!
+  rake
   redcarpet
   rspec
   simplecov
