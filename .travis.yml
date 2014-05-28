@@ -10,4 +10,5 @@ jdk:
   - openjdk7
 matrix:
   allow_failures:
+    - rvm: 1.9.3
     - rvm: rbx-2
