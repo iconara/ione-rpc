@@ -6,13 +6,14 @@ module Ione
     class Peer
       attr_reader :host, :port
 
-      def initialize(connection, codec)
+      def initialize(connection, codec, scheduler=nil)
         @connection = connection
         @connection.on_data(&method(:handle_data))
         @connection.on_closed(&method(:handle_closed))
         @host = @connection.host
         @port = @connection.port
         @codec = codec
+        @scheduler = scheduler
         @buffer = Ione::ByteBuffer.new
         @closed_promise = Promise.new
         @current_message = nil

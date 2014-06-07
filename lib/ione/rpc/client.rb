@@ -141,15 +141,18 @@ module Ione
       # @param [Object] request the request to send.
       # @param [Object] connection the connection to send the request on. This
       #   parameter is internal and should only be used from {#initialize_connection}.
+      # @param [Object] timeout the maximum time in seconds to wait for a response
+      #   before failing the returned future with a {Ione::Rpc::TimeoutError}.
+      #   There is no timeout by default.
       # @return [Ione::Future<Object>] a future that resolves to the response
       #   from the server, or fails because there was an error while processing
       #   the request (this is not the same thing as the server sending an
       #   error response – that is protocol specific and up to the implementation
       #   to handle), or when there was no connection open.
-      def send_request(request, connection=nil)
+      def send_request(request, connection=nil, timeout=nil)
         connection = connection || @lock.synchronize { choose_connection(@connections, request) }
         if connection
-          f = connection.send_message(request)
+          f = connection.send_message(request, timeout)
           f = f.fallback do |error|
             if error.is_a?(Io::ConnectionClosedError)
               @logger.warn('Request failed because the connection closed, retrying') if @logger
@@ -261,7 +264,7 @@ module Ione
       end
 
       def create_connection(raw_connection)
-        Ione::Rpc::ClientPeer.new(raw_connection, @codec, @max_channels)
+        Ione::Rpc::ClientPeer.new(raw_connection, @codec, @io_reactor, @max_channels)
       end
 
       def handle_connected(connection)

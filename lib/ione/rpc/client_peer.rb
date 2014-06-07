@@ -7,14 +7,14 @@ module Ione
   module Rpc
     # @private
     class ClientPeer < Peer
-      def initialize(connection, codec, max_channels)
-        super(connection, codec)
+      def initialize(connection, codec, scheduler, max_channels)
+        super(connection, codec, scheduler)
         @lock = Mutex.new
         @channels = [nil] * max_channels
         @queue = []
       end
 
-      def send_message(request)
+      def send_message(request, timeout=nil)
         promise = Ione::Promise.new
         channel = @lock.synchronize do
           take_channel(promise)
@@ -24,6 +24,14 @@ module Ione
         else
           @lock.synchronize do
             @queue << [request, promise]
+          end
+        end
+        if timeout
+          @scheduler.schedule_timer(timeout).on_value do
+            unless promise.future.completed?
+              error = Rpc::TimeoutError.new('No response received within %ss' % timeout.to_s)
+              promise.fail(error)
+            end
           end
         end
         promise.future
@@ -37,7 +45,7 @@ module Ione
           @channels[channel] = nil
           promise
         end
-        if promise
+        if promise && !promise.future.completed?
           promise.fulfill(response)
         end
         flush_queue

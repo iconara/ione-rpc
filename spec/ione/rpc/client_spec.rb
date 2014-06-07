@@ -16,8 +16,14 @@ module Ione
 
       let :io_reactor do
         running = [false]
+        timer_promises = []
         r = double(:io_reactor)
         r.stub(:running?) { running[0] }
+        r.stub(:schedule_timer) do |timeout|
+          timer_promises << Promise.new
+          timer_promises.last.future
+        end
+        r.stub(:timer_promises).and_return(timer_promises)
         r.stub(:start) do
           running[0] = true
           Future.resolved(r)
@@ -197,7 +203,7 @@ module Ione
           before do
             client.start.value
             client.created_connections.each do |connection|
-              connection.stub(:send_message).with('PING').and_return(Future.resolved('PONG'))
+              connection.stub(:send_message).with('PING', nil).and_return(Future.resolved('PONG'))
             end
           end
 
@@ -222,6 +228,20 @@ module Ione
           1000.times { client.send_request('PING') }
           client.created_connections.each do |connection|
             connection.requests.size.should be_within(50).of(333)
+          end
+        end
+
+        context 'with a timeout' do
+          it 'passes the timeout to the connection' do
+            client.start.value
+            timeouts = []
+            client.created_connections.each do |connection|
+              connection.stub(:send_message) do |rq, timeout|
+                timeouts << timeout
+              end
+            end
+            client.send_request('PING', nil, 2)
+            timeouts.should include(2)
           end
         end
 
@@ -415,7 +435,7 @@ module Ione
 
         it 'logs when requests fail' do
           client.start.value
-          client.created_connections.each { |connection| connection.stub(:send_message).with('PING').and_return(Future.failed(StandardError.new('BORK'))) }
+          client.created_connections.each { |connection| connection.stub(:send_message).with('PING', nil).and_return(Future.failed(StandardError.new('BORK'))) }
           client.send_request('PING')
           logger.should have_received(:warn).with(/request failed: BORK/i)
         end
@@ -605,9 +625,9 @@ module ClientSpec
       @raw_connection.port
     end
 
-    def send_message(request)
+    def send_message(request, timeout=nil)
       @requests << request
-      @peer_connection.send_message(request)
+      @peer_connection.send_message(request, timeout)
       Ione::Future.resolved
     end
   end

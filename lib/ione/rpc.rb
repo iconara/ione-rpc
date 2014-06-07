@@ -5,6 +5,7 @@ require 'ione'
 
 module Ione
   module Rpc
+    TimeoutError = Class.new(StandardError)
   end
 end
 

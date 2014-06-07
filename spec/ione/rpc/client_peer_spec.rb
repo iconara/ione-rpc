@@ -8,7 +8,7 @@ module Ione
   module Rpc
     describe ClientPeer do
       let! :peer do
-        RpcSpec::TestClientPeer.new(connection, codec, max_channels)
+        RpcSpec::TestClientPeer.new(connection, codec, scheduler, max_channels)
       end
 
       let :connection do
@@ -17,6 +17,10 @@ module Ione
 
       let :codec do
         double(:codec)
+      end
+
+      let :scheduler do
+        double(:scheduler)
       end
 
       let :max_channels do
@@ -37,6 +41,15 @@ module Ione
         codec.stub(:encode) do |message, channel|
           '%s@%03d' % [message, channel]
         end
+      end
+
+      before do
+        timer_promises = []
+        scheduler.stub(:schedule_timer) do |timeout|
+          timer_promises << Promise.new
+          timer_promises.last.future
+        end
+        scheduler.stub(:timer_promises).and_return(timer_promises)
       end
 
       include_examples 'peers'
@@ -84,6 +97,19 @@ module Ione
           f.should_not be_resolved
           connection.data_listener.call('bar@000')
           f.value.payload.should == 'bar'
+        end
+
+        it 'fails the request when the timeout passes before the response is received' do
+          f = peer.send_message('foo', 2)
+          scheduler.timer_promises.first.fulfill
+          expect { f.value }.to raise_error(Rpc::TimeoutError)
+        end
+
+        it 'does not fail the request when the response is received before the timeout passes' do
+          f = peer.send_message('foo', 2)
+          connection.data_listener.call('bar@000')
+          scheduler.timer_promises.first.fulfill
+          expect { f.value }.to_not raise_error
         end
       end
     end
