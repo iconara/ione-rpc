@@ -28,7 +28,7 @@ module Ione
       # @return [String] an encoded frame with the message and channel
       def encode(message, channel)
         data = encode_message(message)
-        [1, channel, data.bytesize, data.to_s].pack('ccNa*')
+        [1, channel, data.bytesize, data.to_s].pack(FRAME_V1_FORMAT)
       end
 
       # Decodes a frame, piece by piece if necessary.
@@ -122,6 +122,10 @@ module Ione
           @length && @buffer.size >= @length
         end
       end
+
+      private
+
+      FRAME_V1_FORMAT = 'ccNa*'
     end
 
     # A codec that works with encoders like JSON, MessagePack, YAML and others
