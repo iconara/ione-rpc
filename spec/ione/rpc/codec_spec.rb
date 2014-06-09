@@ -20,19 +20,19 @@ module Ione
         end
 
         it 'encodes the version in the first byte' do
-          encoded_message[0, 1].unpack('c').should == [1]
+          encoded_message[0, 1].unpack('c').should == [2]
         end
 
-        it 'encodes the channel in the second byte' do
-          encoded_message[1, 1].unpack('c').should == [42]
+        it 'encodes the channel in the third and fourth byte' do
+          encoded_message[2, 2].unpack('n').should == [42]
         end
 
         it 'encodes the length of the frame in the following four bytes' do
-          encoded_message[2, 4].unpack('N').should == [22]
+          encoded_message[4, 4].unpack('N').should == [22]
         end
 
         it 'encodes the object as JSON' do
-          encoded_message[6..-1].should == '{"foo":"bar","baz":42}'
+          encoded_message[8..-1].should == '{"foo":"bar","baz":42}'
         end
       end
 
@@ -99,21 +99,34 @@ module Ione
           42
         end
 
-        let :frame do
+        let :v1_frame do
           %(\x01\x2a\x00\x00\x00\x16{"foo":"bar","baz":42})
         end
 
-        it 'decoding a encoded frame returns the original message' do
-          frm = codec.encode(message, channel)
-          msg, ch, _ = codec.decode(Ione::ByteBuffer.new(frm), nil)
-          msg.should == message
-          ch.should == channel
+        let :v2_frame do
+          %(\x02\x00\x00\x2a\x00\x00\x00\x16{"foo":"bar","baz":42})
         end
 
-        it 'encoding a message gives the original frame' do
-          msg, ch, _ = codec.decode(Ione::ByteBuffer.new(frame), nil)
-          frm = codec.encode(msg, ch)
-          frm.should == frame
+        context 'with a v1 frame' do
+          it 'decodes a frame' do
+            msg, ch, _ = codec.decode(Ione::ByteBuffer.new(v1_frame), nil)
+            msg.should == message
+          end
+        end
+
+        context 'with a v2 frame' do
+          it 'decoding a encoded frame returns the original message' do
+            frm = codec.encode(message, channel)
+            msg, ch, _ = codec.decode(Ione::ByteBuffer.new(frm), nil)
+            msg.should == message
+            ch.should == channel
+          end
+
+          it 'encoding a message gives the original frame' do
+            msg, ch, _ = codec.decode(Ione::ByteBuffer.new(v2_frame), nil)
+            frm = codec.encode(msg, ch)
+            frm.should == v2_frame
+          end
         end
       end
     end
@@ -125,13 +138,13 @@ module Ione
 
       describe '#encode' do
         it 'calls #dump on the delegate' do
-          codec.encode({'foo' => 'bar'}, 0)[6..-1].should == '{"foo":"bar"}'
+          codec.encode({'foo' => 'bar'}, 0)[8..-1].should == '{"foo":"bar"}'
         end
       end
 
       describe '#decode' do
         it 'calls #load on the delegate' do
-          buffer = Ione::ByteBuffer.new(%(\x01\x00\x00\x00\x00\x0d{"foo":"bar"}))
+          buffer = Ione::ByteBuffer.new(%(\x02\x00\x00\x00\x00\x00\x00\x0d{"foo":"bar"}))
           message, _, _ = codec.decode(buffer, nil)
           message.should eql('foo' => 'bar')
         end

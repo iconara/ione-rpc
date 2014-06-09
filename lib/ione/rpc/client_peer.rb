@@ -8,6 +8,7 @@ module Ione
     # @private
     class ClientPeer < Peer
       def initialize(connection, codec, scheduler, max_channels)
+        raise ArgumentError, 'More than 2**15 channels is not supported' if max_channels > 2**15
         super(connection, codec, scheduler)
         @lock = Mutex.new
         @channels = [nil] * max_channels

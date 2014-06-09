@@ -64,6 +64,12 @@ module Ione
         end
       end
 
+      describe '#initialize' do
+        it 'raises ArgumentError when the specified max channels is more than the protocol handles' do
+          expect { RpcSpec::TestClientPeer.new(connection, codec, scheduler, 2**24) }.to raise_error(ArgumentError)
+        end
+      end
+
       describe '#send_message' do
         it 'encodes and sends a request frame' do
           peer.send_message('hello')

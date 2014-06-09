@@ -28,7 +28,7 @@ module Ione
       # @return [String] an encoded frame with the message and channel
       def encode(message, channel)
         data = encode_message(message)
-        [1, channel, data.bytesize, data.to_s].pack(FRAME_V1_FORMAT)
+        [2, 0, channel, data.bytesize, data.to_s].pack(FRAME_V2_FORMAT)
       end
 
       # Decodes a frame, piece by piece if necessary.
@@ -106,7 +106,11 @@ module Ione
         def read_header
           n = @buffer.read_short
           @version = n >> 8
-          @channel = n & 0xff
+          if @version == 1
+            @channel = n & 0xff
+          else
+            @channel = @buffer.read_short
+          end
           @length = @buffer.read_int
         end
 
@@ -115,7 +119,7 @@ module Ione
         end
 
         def header_ready?
-          @length.nil? && @buffer.size >= 6
+          @length.nil? && @buffer.size >= 8
         end
 
         def body_ready?
@@ -125,7 +129,8 @@ module Ione
 
       private
 
-      FRAME_V1_FORMAT = 'ccNa*'
+      FRAME_V1_FORMAT = 'ccNa*'.freeze
+      FRAME_V2_FORMAT = 'ccnNa*'.freeze
     end
 
     # A codec that works with encoders like JSON, MessagePack, YAML and others
