@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    ione-rpc (1.0.0.pre1)
+    ione-rpc (1.0.0.pre2)
       ione (~> 1)
 
 GEM
