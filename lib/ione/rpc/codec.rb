@@ -79,6 +79,27 @@ module Ione
         end
       end
 
+      # Whether or not this codec supports channel recoding, see {#recode}.
+      def recoding?
+        true
+      end
+
+      # Recode the channel of a frame.
+      #
+      # This is used primarily by the client when it needs to queue a request
+      # because all channels are occupied. When the codec supports recoding the
+      # client can encode the request when it is queued, instead of when it is
+      # dequeued. This means that in most cases the calling thread will do the
+      # encoding instead of the IO reactor thread.
+      #
+      # @param [String] bytes an encoded frame (the output from {#encode})
+      # @param [Integer] channel the channel to encode into the frame
+      # @return [String] the reencoded frame
+      def recode(bytes, channel)
+        bytes[2, 2] = [channel].pack(CHANNEL_FORMAT)
+        bytes
+      end
+
       # @!method encode_message(message)
       #
       # Encode an object to bytes that can be sent over the network.
@@ -131,6 +152,7 @@ module Ione
 
       FRAME_V1_FORMAT = 'ccNa*'.freeze
       FRAME_V2_FORMAT = 'ccnNa*'.freeze
+      CHANNEL_FORMAT = 'n'.freeze
     end
 
     # A codec that works with encoders like JSON, MessagePack, YAML and others

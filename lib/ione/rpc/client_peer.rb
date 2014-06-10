@@ -13,6 +13,7 @@ module Ione
         @lock = Mutex.new
         @channels = [nil] * max_channels
         @queue = []
+        @encode_eagerly = @codec.recoding?
       end
 
       def send_message(request, timeout=nil)
@@ -21,10 +22,14 @@ module Ione
           take_channel(promise)
         end
         if channel
-          write_message(request, channel)
+          @connection.write(@codec.encode(request, channel))
         else
           @lock.synchronize do
-            @queue << [request, promise]
+            if @encode_eagerly
+              @queue << [@codec.encode(request, -1), promise]
+            else
+              @queue << [request, promise]
+            end
           end
         end
         if timeout
@@ -59,7 +64,11 @@ module Ione
           while count < max
             request, promise = @queue[count]
             if (channel = take_channel(promise))
-              write_message(request, channel)
+              if @encode_eagerly
+                @connection.write(@codec.recode(request, channel))
+              else
+                @connection.write(@codec.encode(request))
+              end
               count += 1
             else
               break

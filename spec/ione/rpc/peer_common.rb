@@ -29,6 +29,7 @@ shared_examples 'peers' do
 
     before do
       channel = 9
+      codec.stub(:recoding?).and_return(false)
       codec.stub(:decode) do |buffer, previous_frame|
         if buffer.empty?
           [empty_frame, channel, false]

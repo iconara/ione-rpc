@@ -58,6 +58,7 @@ module Ione
       end
 
       before do
+        codec.stub(:recoding?).and_return(false)
         codec.stub(:encode) { |input, channel| input }
       end
 

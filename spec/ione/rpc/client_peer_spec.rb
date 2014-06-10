@@ -16,7 +16,7 @@ module Ione
       end
 
       let :codec do
-        double(:codec)
+        double(:codec, recoding?: true)
       end
 
       let :scheduler do
@@ -29,7 +29,7 @@ module Ione
 
       before do
         codec.stub(:decode) do |buffer, current_frame|
-          message = buffer.to_s.scan(/[\w\d]+@\d+/).flatten.first
+          message = buffer.to_s.scan(/[\w\d]+@-?\d+/).flatten.first
           if message
             payload, channel = message.split('@')
             buffer.discard(message.bytesize)
@@ -40,6 +40,10 @@ module Ione
         end
         codec.stub(:encode) do |message, channel|
           '%s@%03d' % [message, channel]
+        end
+        codec.stub(:recode) do |message, channel|
+          payload, _ = message.split('@')
+          codec.encode(payload, channel)
         end
       end
 
@@ -89,6 +93,11 @@ module Ione
           connection.written_bytes.bytesize.should == max_channels * 7
         end
 
+        it 'encodes messages when they are enqueued' do
+          (max_channels + 2).times { peer.send_message('foo') }
+          codec.should have_received(:encode).exactly(max_channels + 2).times
+        end
+
         it 'sends queued requests when channels become available' do
           (max_channels + 2).times { |i| peer.send_message("foo#{i.to_s.rjust(3, '0')}") }
           length_before = connection.written_bytes.bytesize
@@ -116,6 +125,17 @@ module Ione
           connection.data_listener.call('bar@000')
           scheduler.timer_promises.first.fulfill
           expect { f.value }.to_not raise_error
+        end
+
+        context 'with a non-recoding codec' do
+          let :codec do
+            double(:codec, recoding?: false)
+          end
+
+          it 'encodes messages when they are dequeued' do
+            (max_channels + 2).times { peer.send_message('foo') }
+            codec.should have_received(:encode).exactly(max_channels).times
+          end
         end
       end
     end

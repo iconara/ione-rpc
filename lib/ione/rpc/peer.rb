@@ -45,10 +45,6 @@ module Ione
       def handle_closed(cause=nil)
         @closed_promise.fulfill(cause)
       end
-
-      def write_message(message, channel)
-        @connection.write(@codec.encode(message, channel))
-      end
     end
   end
 end

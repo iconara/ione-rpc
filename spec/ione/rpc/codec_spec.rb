@@ -90,6 +90,19 @@ module Ione
         end
       end
 
+      describe '#recode' do
+        let :object do
+          {'foo' => 'bar', 'baz' => 42}
+        end
+
+        it 'changes the channel in the encoded bytes' do
+          encoded = codec.encode(object, 42)
+          recoded = codec.recode(encoded, 99)
+          _, channel, _ = codec.decode(Ione::ByteBuffer.new(recoded), nil)
+          channel.should == 99
+        end
+      end
+
       context 'when decoding and encoding' do
         let :message do
           {'foo' => 'bar', 'baz' => 42}

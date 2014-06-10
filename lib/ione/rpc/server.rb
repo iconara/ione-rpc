@@ -92,7 +92,7 @@ module Ione
         def handle_message(message, channel)
           f = @server.handle_request(message, self)
           f.on_value do |response|
-            write_message(response, channel)
+            @connection.write(@codec.encode(response, channel))
           end
         end
       end

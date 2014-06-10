@@ -160,14 +160,18 @@ module Ione
         end
 
         it 'responds to the same peer and channel when the future returned by #handle_request is resolved' do
+          sent_pair = nil
+          codec.stub(:encode) do |response, channel|
+            sent_pair = [response, channel]
+            response
+          end
           promise = Promise.new
           server.override_handle_request { promise.future }
           peer = server.connections.first
-          peer.stub(:write_message)
           peer.handle_message('FOOBAZ', 42)
-          peer.should_not have_received(:write_message)
+          sent_pair.should be_nil
           promise.fulfill('BAZFOO')
-          peer.should have_received(:write_message).with('BAZFOO', 42)
+          sent_pair.should == ['BAZFOO', 42]
         end
 
         it 'uses the codec to encode the response' do
