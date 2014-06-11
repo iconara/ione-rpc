@@ -48,7 +48,10 @@ module Ione
 
       # A client is connected when it has at least one open connection.
       def connected?
-        @lock.synchronize { @connections.any? }
+        @lock.lock
+        @connections.any?
+      ensure
+        @lock.unlock
       end
 
       # Start the client and connect to all hosts. This also starts the IO
@@ -150,7 +153,14 @@ module Ione
       #   error response – that is protocol specific and up to the implementation
       #   to handle), or when there was no connection open.
       def send_request(request, connection=nil, timeout=nil)
-        connection = connection || @lock.synchronize { choose_connection(@connections, request) }
+        unless connection
+          @lock.lock
+          begin
+            connection = choose_connection(@connections, request)
+          ensure
+            @lock.unlock
+          end
+        end
         if connection
           f = connection.send_message(request, timeout)
           f = f.fallback do |error|

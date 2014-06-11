@@ -18,18 +18,22 @@ module Ione
 
       def send_message(request, timeout=nil)
         promise = Ione::Promise.new
-        channel = @lock.synchronize do
-          take_channel(promise)
+        channel = nil
+        @lock.lock
+        begin
+          channel = take_channel(promise)
+        ensure
+          @lock.unlock
         end
         if channel
           @connection.write(@codec.encode(request, channel))
         else
-          @lock.synchronize do
-            if @encode_eagerly
-              @queue << [@codec.encode(request, -1), promise]
-            else
-              @queue << [request, promise]
-            end
+          pair = [@encode_eagerly ? @codec.encode(request, -1) : request, promise]
+          @lock.lock
+          begin
+            @queue << pair
+          ensure
+            @lock.unlock
           end
         end
         if timeout
@@ -46,10 +50,13 @@ module Ione
       private
 
       def handle_message(response, channel)
-        promise = @lock.synchronize do
+        promise = nil
+        @lock.lock
+        begin
           promise = @channels[channel]
           @channels[channel] = nil
-          promise
+        ensure
+          @lock.unlock
         end
         if promise && !promise.future.completed?
           promise.fulfill(response)
@@ -58,24 +65,25 @@ module Ione
       end
 
       def flush_queue
-        @lock.synchronize do
-          count = 0
-          max = @queue.size
-          while count < max
-            request, promise = @queue[count]
-            if (channel = take_channel(promise))
-              if @encode_eagerly
-                @connection.write(@codec.recode(request, channel))
-              else
-                @connection.write(@codec.encode(request))
-              end
-              count += 1
+        @lock.lock
+        count = 0
+        max = @queue.size
+        while count < max
+          request, promise = @queue[count]
+          if (channel = take_channel(promise))
+            if @encode_eagerly
+              @connection.write(@codec.recode(request, channel))
             else
-              break
+              @connection.write(@codec.encode(request))
             end
+            count += 1
+          else
+            break
           end
-          @queue = @queue.drop(count)
         end
+        @queue = @queue.drop(count)
+      ensure
+        @lock.unlock
       end
 
       def take_channel(promise)
