@@ -14,6 +14,25 @@ module Ione
         @channels = [nil] * max_channels
         @queue = []
         @encode_eagerly = @codec.recoding?
+        @sent_messages = 0
+        @received_responses = 0
+        @timeouts = 0
+      end
+
+      def stats
+        @lock.lock
+        {
+          :host => @host,
+          :port => @port,
+          :max_channels => @channels.size,
+          :active_channels => @channels.size - @channels.count(nil),
+          :queued_messages => @queue.size,
+          :sent_messages => @sent_messages,
+          :received_responses => @received_responses,
+          :timeouts => @timeouts,
+        }
+      ensure
+        @lock.unlock
       end
 
       def send_message(request, timeout=nil)
@@ -22,6 +41,7 @@ module Ione
         @lock.lock
         begin
           channel = take_channel(promise)
+          @sent_messages += 1 if channel
         ensure
           @lock.unlock
         end
@@ -41,6 +61,7 @@ module Ione
             unless promise.future.completed?
               error = Rpc::TimeoutError.new('No response received within %ss' % timeout.to_s)
               promise.fail(error)
+              @timeouts += 1
             end
           end
         end
@@ -55,6 +76,7 @@ module Ione
         begin
           promise = @channels[channel]
           @channels[channel] = nil
+          @received_responses += 1 if promise
         ensure
           @lock.unlock
         end
@@ -81,6 +103,7 @@ module Ione
             break
           end
         end
+        @sent_messages += count
         @queue = @queue.drop(count)
       ensure
         @lock.unlock

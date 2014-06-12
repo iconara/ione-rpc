@@ -54,6 +54,32 @@ module Ione
         @lock.unlock
       end
 
+      # Returns an array of info and statistics about the currently open connections.
+      #
+      # Each open connection is represented by a hash which includes the keys
+      #
+      # * `:host` and `:port`
+      # * `:max_channels`: the maximum number of messages to send concurrently
+      # * `:active_channels`: the number of sent messages that have not yet
+      #   received a response
+      # * `:queued_messages`: the number of messages that couldn't be sent
+      #   immediately because all channels were occupied and thus had to be queued.
+      # * `:sent_messages`: the total number of messages sent since the connection
+      #   was opened
+      # * `:received_responses`: the total number of responses received since
+      #   the connection was opened
+      # * `:timeouts`: the number of sent messages that did not receive a response
+      #   before their timeout expired
+      #
+      # @return [Array<Hash>] an array of hashes that each contain info and
+      #   statistics from an open connection.
+      def connection_stats
+        @lock.lock
+        @connections.map(&:stats)
+      ensure
+        @lock.unlock
+      end
+
       # Start the client and connect to all hosts. This also starts the IO
       # reactor if it was not already started.
       #

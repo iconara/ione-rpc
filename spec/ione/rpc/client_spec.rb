@@ -419,6 +419,19 @@ module Ione
         end
       end
 
+      describe '#connection_stats' do
+        it 'is empty when no connections are open' do
+          client.connection_stats.should be_empty
+        end
+
+        it 'returns an array of the host, port and statistics from each open connection' do
+          client.start.value
+          stats = client.connection_stats
+          stats.should have(3).items
+          stats.should include(host: 'node1.example.com', port: 5432, fake_stats: true)
+        end
+      end
+
       context 'when disconnected' do
         it 'logs that the connection closed' do
           client.start.value
@@ -603,6 +616,14 @@ module ClientSpec
       @raw_connection = raw_connection
       @peer_connection = peer_connection
       @requests = []
+    end
+
+    def stats
+      {
+        :host => @peer_connection.host,
+        :port => @peer_connection.port,
+        :fake_stats => true,
+      }
     end
 
     def closed?

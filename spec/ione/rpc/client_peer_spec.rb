@@ -138,6 +138,58 @@ module Ione
           end
         end
       end
+
+      describe '#stats' do
+        context 'returns a hash that' do
+          it 'contains the host' do
+            peer.stats.should include(host: connection.host)
+          end
+
+          it 'contains the port' do
+            peer.stats.should include(port: connection.port)
+          end
+
+          it 'contains the max number of channels' do
+            peer.stats.should include(max_channels: max_channels)
+          end
+
+          it 'contains the number of active channels' do
+            peer.stats.should include(active_channels: 0)
+            peer.send_message('hello')
+            peer.stats.should include(active_channels: 1)
+          end
+
+          it 'contains the number of queued messages' do
+            peer.stats.should include(queued_messages: 0)
+            17.times { peer.send_message('hello') }
+            peer.stats.should include(queued_messages: 1)
+            connection.data_listener.call('bar@000')
+            peer.stats.should include(queued_messages: 0)
+          end
+
+          it 'contains the number of sent messages' do
+            peer.stats.should include(sent_messages: 0)
+            17.times { peer.send_message('hello') }
+            connection.data_listener.call('bar@000')
+            peer.stats.should include(sent_messages: 17)
+          end
+
+          it 'contains the number of received responses' do
+            peer.stats.should include(received_responses: 0)
+            17.times { peer.send_message('hello') }
+            connection.data_listener.call('bar@000')
+            connection.data_listener.call('bar@000')
+            peer.stats.should include(received_responses: 2)
+          end
+
+          it 'contains the number of timed out responses' do
+            peer.stats.should include(timeouts: 0)
+            peer.send_message('hello', 1)
+            scheduler.timer_promises.first.fulfill
+            peer.stats.should include(timeouts: 1)
+          end
+        end
+      end
     end
   end
 end
