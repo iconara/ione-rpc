@@ -34,6 +34,37 @@ module Ione
         it 'encodes the object as JSON' do
           encoded_message[8..-1].should == '{"foo":"bar","baz":42}'
         end
+
+        context 'with a compressor' do
+          let :codec do
+            CodecSpec::JsonCodec.new(compressor: compressor)
+          end
+
+          let :compressor do
+            double(:compressor)
+          end
+
+          before do
+            compressor.stub(:compress?).and_return(true)
+            compressor.stub(:compress).and_return('FAKECOMPRESSEDFREAME')
+          end
+
+          it 'sets the compression flag' do
+            encoded_message = codec.encode(object, 42)
+            encoded_message[1].unpack('c').should == [1]
+          end
+
+          it 'compresses the frame body' do
+            encoded_message = codec.encode(object, 42)
+            encoded_message[4, 4].unpack('N').should == [20]
+            encoded_message[8..-1].should == 'FAKECOMPRESSEDFREAME'
+          end
+
+          it 'does not compress the frame body when the compressor advices against it' do
+            compressor.stub(:compress?).and_return(false)
+            encoded_message[8..-1].should == '{"foo":"bar","baz":42}'
+          end
+        end
       end
 
       describe '#decode' do
@@ -87,6 +118,50 @@ module Ione
           message, channel = codec.decode(buffer, message)
           message.should == object
           channel.should == 42
+        end
+
+        context 'when the frame is compressed' do
+          let :codec do
+            CodecSpec::JsonCodec.new(compressor: compressor)
+          end
+
+          let :compressor do
+            double(:compressor)
+          end
+
+          let :encoded_message do
+            %(\x02\x01\x00\x2a\x00\x00\x00\x13FAKECOMPRESSEDFRAME)
+          end
+
+          before do
+            compressor.stub(:decompress).with('FAKECOMPRESSEDFRAME').and_return('{"foo":"bar","baz":42}')
+          end
+
+          it 'decompresses the frame before decoding it' do
+            message, channel, complete = codec.decode(Ione::ByteBuffer.new(encoded_message), nil)
+            complete.should be_true
+            message.should == object
+            channel.should == 42
+          end
+
+          it 'raises an error when the frame is compressed and the codec has not been configured with a compressor' do
+            codec = CodecSpec::JsonCodec.new
+            buffer = Ione::ByteBuffer.new(encoded_message)
+            expect { codec.decode(buffer, nil) }.to raise_error(CodecError, 'Compressed frame received but no compressor available')
+          end
+        end
+
+        context 'when the codec is lazy' do
+          let :codec do
+            CodecSpec::JsonCodec.new(lazy: true)
+          end
+
+          it 'returns an object with a #decode method instead of the message' do
+            message, channel, complete = codec.decode(Ione::ByteBuffer.new(encoded_message), nil)
+            complete.should be_true
+            channel.should == 42
+            message.decode.should == object
+          end
         end
       end
 

@@ -2,9 +2,20 @@
 
 module Ione
   module Rpc
+    CodecError = Class.new(StandardError)
+
     # Codecs are used to encode and decode the messages sent between the client
     # and server. Codecs must be able to decode frames in a streaming fashion,
     # i.e. frames that come in pieces.
+    #
+    # Codecs can be configured to compress frame bodies by giving them a
+    # compressor. A compressor is an object that responds to `#compress`,
+    # `#decompress` and `#compress?`. The first takes a string and returns
+    # a compressed string, the second does the reverse and the third is a way
+    # for the compressor to advice the codec whether or not it's meaningful to
+    # encode the frame at all. `#compress?` will get the same argument as
+    # `#compress` and should return true or false. It could for example return
+    # true when the frame size is over a threshold value.
     #
     # If you want to control how messages are framed you can implement your
     # own codec from scratch by implementing {#encode} and {#decode}, but most
@@ -15,48 +26,90 @@ module Ione
     #
     # Codecs must be stateless.
     #
+    # Since the IO layer has no knowledge about the framing it can't know
+    # how many bytes are needed before a frame can be fully decoded so instead
+    # the codec needs to be able to process partial frames. At the same time
+    # a codec can be used concurrently and must be stateless. To support partial
+    # decoding a codec can return a state instead of a decoded message until
+    # a complete frame can be decoded.
+    #
+    # The codec must return three values: the last value must be true if a
+    # if a message was decoded fully, and false if not enough bytes were
+    # available. When it is true the first piece is the message and the second
+    # the channel. When it is false the first piece is the partial decoded
+    # state (this can be any object at all) and the second is nil. The partial
+    # decoded state will be passed in as the second argument on the next call.
+    #
+    # In other words: the first time {#decode} is called the second argument
+    # will be nil, but on subsequent calls, until the third return value is
+    # true, the second argument will be whatever was returned by the previous
+    # call.
+    #
+    # The buffer might contain more bytes than needed to decode a frame, and
+    # the implementation must not consume these. The implementation must
+    # consume all of the bytes of the current frame, but none of the bytes of
+    # the next frame.
+    #
     # Codecs must also make sure that these (conceptual) invariants hold:
     # `decode(encode(message, channel)) == [message, channel]` and
     # `encode(decode(frame)) == frame` (the return values are not entirely
     # compatible, but the concept should be clear).
     class Codec
+      # @param [Hash] options
+      # @option options [Object] :compressor a compressor to use to compress
+      #   and decompress frames (see above for the required interface it needs
+      #   to implement).
+      # @option options [Object] :lazy whether or not to decode the frames
+      #   immediately or return an object that can be decoded later, see {#decode}.
+      def initialize(options={})
+        @compressor = options[:compressor]
+        @lazy = options[:lazy]
+      end
+
       # Encodes a frame with a header that includes the frame size and channel,
       # and the message as body.
+      #
+      # Will compress the frame body and set the compression flag when the codec
+      # has been configured with a compressor, and it says the frame should be
+      # compressed.
       #
       # @param [Object] message the message to encode
       # @param [Integer] channel the channel to encode into the frame
       # @return [String] an encoded frame with the message and channel
       def encode(message, channel)
         data = encode_message(message)
-        [2, 0, channel, data.bytesize, data.to_s].pack(FRAME_V2_FORMAT)
+        flags = 0
+        if @compressor && @compressor.compress?(data)
+          data = @compressor.compress(data)
+          flags |= COMPRESSION_FLAG
+        end
+        [2, flags, channel, data.bytesize, data.to_s].pack(FRAME_V2_FORMAT)
       end
 
       # Decodes a frame, piece by piece if necessary.
       #
-      # Since the IO layer has no knowledge about the framing it can't know
-      # how many bytes are needed before a frame can be fully decoded so instead
-      # the codec needs to be able to process partial frames. At the same time
-      # a codec can be used concurrently and must be stateless. To support partial
-      # decoding a codec can return a state instead of a decoded message until
-      # a complete frame can be decoded.
+      # Since the codec can be called before a full frame has been received it
+      # returns a three-tuple where the last component is a boolean flag that says
+      # whether or not the frame is completely decoded. As long as the buffer
+      # does not contain a full frame the first component will be a state object
+      # which must be passed in as the second argument on the next call to
+      # {#decode}. When the buffer contains a full frame {#decode_message} will
+      # be called and the decoded message returned as the first component, the
+      # second will be the channel and the third will be true.
       #
-      # The codec must return three values: the last value must be true if a
-      # if a message was decoded fully, and false if not enough bytes were
-      # available. When it is true the first piece is the message and the second
-      # the channel. When it is false the first piece is the partial decoded
-      # state (this can be any object at all) and the second is nil. The partial
-      # decoded state will be passed in as the second argument on the next call.
+      # When the compression flag is set the codec uses the configured compressor
+      # to decode the frame before passing the decompressed bytes to
+      # {#decode_message}.
       #
-      # In other words: the first time {#decode} is called the second argument
-      # will be nil, but on subsequent calls, until the third return value is
-      # true, the second argument will be whatever was returned by the previous
-      # call.
+      # Since the IO thread can spend a significant proportion of its time doing
+      # frame decoding (the encoding is done in the calling thread) there is an
+      # option to create "lazy" codecs that return an intermediate object instead
+      # of a decoded message. When the codec is created with the `:lazy` option
+      # {#decode} returns an object with a `#decode` method, that in turn returns
+      # the decoded message.
       #
-      # The buffer might contain more bytes than needed to decode a frame, and
-      # the implementation must not consume these. The implementation must
-      # consume all of the bytes of the current frame, but none of the bytes of
-      # the next frame.
-      #
+      # @raise [Ione::Rpc::CodecError] when a frame has the compression flag set
+      #   and the codec is not configured with a compressor.
       # @param [Ione::ByteBuffer] buffer the byte buffer that contains the frame
       #   data. The byte buffer is owned by the caller and should only be read from.
       # @param [Object, nil] state the first value returned from the previous
@@ -73,10 +126,29 @@ module Ione
           state.read_header
         end
         if state.body_ready?
-          return decode_message(state.read_body), state.channel, true
+          body = state.read_body
+          channel = state.channel
+          if @lazy
+            message = LazilyDecodedFrame.new(self, state, body)
+          else
+            message = decode_body(state, body)
+          end
+          return message, state.channel, true
         else
           return state, nil, false
         end
+      end
+
+      # @private
+      def decode_body(state, body)
+        if state.compressed?
+          if @compressor
+            body = @compressor.decompress(body)
+          else
+            raise CodecError, 'Compressed frame received but no compressor available'
+          end
+        end
+        decode_message(body)
       end
 
       # Whether or not this codec supports channel recoding, see {#recode}.
@@ -127,6 +199,7 @@ module Ione
         def read_header
           n = @buffer.read_short
           @version = n >> 8
+          @compressed = n & COMPRESSION_FLAG == COMPRESSION_FLAG
           if @version == 1
             @channel = n & 0xff
           else
@@ -146,6 +219,23 @@ module Ione
         def body_ready?
           @length && @buffer.size >= @length
         end
+
+        def compressed?
+          @compressed
+        end
+      end
+
+      # @private
+      class LazilyDecodedFrame
+        def initialize(codec, state, body)
+          @codec = codec
+          @state = state
+          @body = body
+        end
+
+        def decode
+          @decoded ||= @codec.decode_body(@state, @body)
+        end
       end
 
       private
@@ -153,6 +243,7 @@ module Ione
       FRAME_V1_FORMAT = 'ccNa*'.freeze
       FRAME_V2_FORMAT = 'ccnNa*'.freeze
       CHANNEL_FORMAT = 'n'.freeze
+      COMPRESSION_FLAG = 1
     end
 
     # A codec that works with encoders like JSON, MessagePack, YAML and others
