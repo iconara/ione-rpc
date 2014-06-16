@@ -59,8 +59,11 @@ module Ione
       # @option options [Object] :compressor a compressor to use to compress
       #   and decompress frames (see above for the required interface it needs
       #   to implement).
+      # @option options [Object] :lazy whether or not to decode the frames
+      #   immediately or return an object that can be decoded later, see {#decode}.
       def initialize(options={})
         @compressor = options[:compressor]
+        @lazy = options[:lazy]
       end
 
       # Encodes a frame with a header that includes the frame size and channel,
@@ -98,6 +101,13 @@ module Ione
       # to decode the frame before passing the decompressed bytes to
       # {#decode_message}.
       #
+      # Since the IO thread can spend a significant proportion of its time doing
+      # frame decoding (the encoding is done in the calling thread) there is an
+      # option to create "lazy" codecs that return an intermediate object instead
+      # of a decoded message. When the codec is created with the `:lazy` option
+      # {#decode} returns an object with a `#decode` method, that in turn returns
+      # the decoded message.
+      #
       # @raise [Ione::Rpc::CodecError] when a frame has the compression flag set
       #   and the codec is not configured with a compressor.
       # @param [Ione::ByteBuffer] buffer the byte buffer that contains the frame
@@ -117,17 +127,28 @@ module Ione
         end
         if state.body_ready?
           body = state.read_body
-          if state.compressed?
-            if @compressor
-              body = @compressor.decompress(body)
-            else
-              raise CodecError, 'Compressed frame received but no compressor available'
-            end
+          channel = state.channel
+          if @lazy
+            message = LazilyDecodedFrame.new(self, state, body)
+          else
+            message = decode_body(state, body)
           end
-          return decode_message(body), state.channel, true
+          return message, state.channel, true
         else
           return state, nil, false
         end
+      end
+
+      # @private
+      def decode_body(state, body)
+        if state.compressed?
+          if @compressor
+            body = @compressor.decompress(body)
+          else
+            raise CodecError, 'Compressed frame received but no compressor available'
+          end
+        end
+        decode_message(body)
       end
 
       # Whether or not this codec supports channel recoding, see {#recode}.
@@ -201,6 +222,19 @@ module Ione
 
         def compressed?
           @compressed
+        end
+      end
+
+      # @private
+      class LazilyDecodedFrame
+        def initialize(codec, state, body)
+          @codec = codec
+          @state = state
+          @body = body
+        end
+
+        def decode
+          @decoded ||= @codec.decode_body(@state, @body)
         end
       end
 

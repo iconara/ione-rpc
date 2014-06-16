@@ -150,6 +150,19 @@ module Ione
             expect { codec.decode(buffer, nil) }.to raise_error(CodecError, 'Compressed frame received but no compressor available')
           end
         end
+
+        context 'when the codec is lazy' do
+          let :codec do
+            CodecSpec::JsonCodec.new(lazy: true)
+          end
+
+          it 'returns an object with a #decode method instead of the message' do
+            message, channel, complete = codec.decode(Ione::ByteBuffer.new(encoded_message), nil)
+            complete.should be_true
+            channel.should == 42
+            message.decode.should == object
+          end
+        end
       end
 
       describe '#recode' do
