@@ -8,19 +8,6 @@ module Ione
     # and server. Codecs must be able to decode frames in a streaming fashion,
     # i.e. frames that come in pieces.
     #
-    # If you want to control how messages are framed you can implement your
-    # own codec from scratch by implementing {#encode} and {#decode}, but most
-    # of the time you should only need to implement {#encode_message} and
-    # {#decode_message} which take care of encoding and decoding the message,
-    # and leave the framing to the default implementation. If you decide to
-    # implement {#encode} and {#decode} you don't need to subclass this class.
-    # Codecs must be stateless.
-    #
-    # Codecs must also make sure that these (conceptual) invariants hold:
-    # `decode(encode(message, channel)) == [message, channel]` and
-    # `encode(decode(frame)) == frame` (the return values are not entirely
-    # compatible, but the concept should be clear).
-    #
     # Codecs can be configured to compress frame bodies by giving them a
     # compressor. A compressor is an object that responds to `#compress`,
     # `#decompress` and `#compress?`. The first takes a string and returns
@@ -29,6 +16,44 @@ module Ione
     # encode the frame at all. `#compress?` will get the same argument as
     # `#compress` and should return true or false. It could for example return
     # true when the frame size is over a threshold value.
+    #
+    # If you want to control how messages are framed you can implement your
+    # own codec from scratch by implementing {#encode} and {#decode}, but most
+    # of the time you should only need to implement {#encode_message} and
+    # {#decode_message} which take care of encoding and decoding the message,
+    # and leave the framing to the default implementation. If you decide to
+    # implement {#encode} and {#decode} you don't need to subclass this class.
+    #
+    # Codecs must be stateless.
+    #
+    # Since the IO layer has no knowledge about the framing it can't know
+    # how many bytes are needed before a frame can be fully decoded so instead
+    # the codec needs to be able to process partial frames. At the same time
+    # a codec can be used concurrently and must be stateless. To support partial
+    # decoding a codec can return a state instead of a decoded message until
+    # a complete frame can be decoded.
+    #
+    # The codec must return three values: the last value must be true if a
+    # if a message was decoded fully, and false if not enough bytes were
+    # available. When it is true the first piece is the message and the second
+    # the channel. When it is false the first piece is the partial decoded
+    # state (this can be any object at all) and the second is nil. The partial
+    # decoded state will be passed in as the second argument on the next call.
+    #
+    # In other words: the first time {#decode} is called the second argument
+    # will be nil, but on subsequent calls, until the third return value is
+    # true, the second argument will be whatever was returned by the previous
+    # call.
+    #
+    # The buffer might contain more bytes than needed to decode a frame, and
+    # the implementation must not consume these. The implementation must
+    # consume all of the bytes of the current frame, but none of the bytes of
+    # the next frame.
+    #
+    # Codecs must also make sure that these (conceptual) invariants hold:
+    # `decode(encode(message, channel)) == [message, channel]` and
+    # `encode(decode(frame)) == frame` (the return values are not entirely
+    # compatible, but the concept should be clear).
     class Codec
       # @param [Hash] options
       # @option options [Object] :compressor a compressor to use to compress
@@ -60,33 +85,18 @@ module Ione
 
       # Decodes a frame, piece by piece if necessary.
       #
+      # Since the codec can be called before a full frame has been received it
+      # returns a three-tuple where the last component is a boolean flag that says
+      # whether or not the frame is completely decoded. As long as the buffer
+      # does not contain a full frame the first component will be a state object
+      # which must be passed in as the second argument on the next call to
+      # {#decode}. When the buffer contains a full frame {#decode_message} will
+      # be called and the decoded message returned as the first component, the
+      # second will be the channel and the third will be true.
+      #
       # When the compression flag is set the codec uses the configured compressor
       # to decode the frame before passing the decompressed bytes to
       # {#decode_message}.
-      #
-      # Since the IO layer has no knowledge about the framing it can't know
-      # how many bytes are needed before a frame can be fully decoded so instead
-      # the codec needs to be able to process partial frames. At the same time
-      # a codec can be used concurrently and must be stateless. To support partial
-      # decoding a codec can return a state instead of a decoded message until
-      # a complete frame can be decoded.
-      #
-      # The codec must return three values: the last value must be true if a
-      # if a message was decoded fully, and false if not enough bytes were
-      # available. When it is true the first piece is the message and the second
-      # the channel. When it is false the first piece is the partial decoded
-      # state (this can be any object at all) and the second is nil. The partial
-      # decoded state will be passed in as the second argument on the next call.
-      #
-      # In other words: the first time {#decode} is called the second argument
-      # will be nil, but on subsequent calls, until the third return value is
-      # true, the second argument will be whatever was returned by the previous
-      # call.
-      #
-      # The buffer might contain more bytes than needed to decode a frame, and
-      # the implementation must not consume these. The implementation must
-      # consume all of the bytes of the current frame, but none of the bytes of
-      # the next frame.
       #
       # @raise [Ione::Rpc::CodecError] when a frame has the compression flag set
       #   and the codec is not configured with a compressor.
