@@ -2,6 +2,8 @@
 
 module Ione
   module Rpc
+    CodecError = Class.new(StandardError)
+
     # Codecs are used to encode and decode the messages sent between the client
     # and server. Codecs must be able to decode frames in a streaming fashion,
     # i.e. frames that come in pieces.
@@ -12,26 +14,55 @@ module Ione
     # {#decode_message} which take care of encoding and decoding the message,
     # and leave the framing to the default implementation. If you decide to
     # implement {#encode} and {#decode} you don't need to subclass this class.
-    #
     # Codecs must be stateless.
     #
     # Codecs must also make sure that these (conceptual) invariants hold:
     # `decode(encode(message, channel)) == [message, channel]` and
     # `encode(decode(frame)) == frame` (the return values are not entirely
     # compatible, but the concept should be clear).
+    #
+    # Codecs can be configured to compress frame bodies by giving them a
+    # compressor. A compressor is an object that responds to `#compress`,
+    # `#decompress` and `#compress?`. The first takes a string and returns
+    # a compressed string, the second does the reverse and the third is a way
+    # for the compressor to advice the codec whether or not it's meaningful to
+    # encode the frame at all. `#compress?` will get the same argument as
+    # `#compress` and should return true or false. It could for example return
+    # true when the frame size is over a threshold value.
     class Codec
+      # @param [Hash] options
+      # @option options [Object] :compressor a compressor to use to compress
+      #   and decompress frames (see above for the required interface it needs
+      #   to implement).
+      def initialize(options={})
+        @compressor = options[:compressor]
+      end
+
       # Encodes a frame with a header that includes the frame size and channel,
       # and the message as body.
+      #
+      # Will compress the frame body and set the compression flag when the codec
+      # has been configured with a compressor, and it says the frame should be
+      # compressed.
       #
       # @param [Object] message the message to encode
       # @param [Integer] channel the channel to encode into the frame
       # @return [String] an encoded frame with the message and channel
       def encode(message, channel)
         data = encode_message(message)
-        [2, 0, channel, data.bytesize, data.to_s].pack(FRAME_V2_FORMAT)
+        flags = 0
+        if @compressor && @compressor.compress?(data)
+          data = @compressor.compress(data)
+          flags |= COMPRESSION_FLAG
+        end
+        [2, flags, channel, data.bytesize, data.to_s].pack(FRAME_V2_FORMAT)
       end
 
       # Decodes a frame, piece by piece if necessary.
+      #
+      # When the compression flag is set the codec uses the configured compressor
+      # to decode the frame before passing the decompressed bytes to
+      # {#decode_message}.
       #
       # Since the IO layer has no knowledge about the framing it can't know
       # how many bytes are needed before a frame can be fully decoded so instead
@@ -57,6 +88,8 @@ module Ione
       # consume all of the bytes of the current frame, but none of the bytes of
       # the next frame.
       #
+      # @raise [Ione::Rpc::CodecError] when a frame has the compression flag set
+      #   and the codec is not configured with a compressor.
       # @param [Ione::ByteBuffer] buffer the byte buffer that contains the frame
       #   data. The byte buffer is owned by the caller and should only be read from.
       # @param [Object, nil] state the first value returned from the previous
@@ -73,7 +106,15 @@ module Ione
           state.read_header
         end
         if state.body_ready?
-          return decode_message(state.read_body), state.channel, true
+          body = state.read_body
+          if state.compressed?
+            if @compressor
+              body = @compressor.decompress(body)
+            else
+              raise CodecError, 'Compressed frame received but no compressor available'
+            end
+          end
+          return decode_message(body), state.channel, true
         else
           return state, nil, false
         end
@@ -127,6 +168,7 @@ module Ione
         def read_header
           n = @buffer.read_short
           @version = n >> 8
+          @compressed = n & COMPRESSION_FLAG == COMPRESSION_FLAG
           if @version == 1
             @channel = n & 0xff
           else
@@ -146,6 +188,10 @@ module Ione
         def body_ready?
           @length && @buffer.size >= @length
         end
+
+        def compressed?
+          @compressed
+        end
       end
 
       private
@@ -153,6 +199,7 @@ module Ione
       FRAME_V1_FORMAT = 'ccNa*'.freeze
       FRAME_V2_FORMAT = 'ccnNa*'.freeze
       CHANNEL_FORMAT = 'n'.freeze
+      COMPRESSION_FLAG = 1
     end
 
     # A codec that works with encoders like JSON, MessagePack, YAML and others
