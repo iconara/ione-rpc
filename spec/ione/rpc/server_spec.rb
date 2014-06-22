@@ -15,7 +15,7 @@ module Ione
       end
 
       let :logger do
-        double(:logger)
+        double(:logger, debug: nil, info: nil, warn: nil, error: nil)
       end
 
       let :acceptor do
@@ -41,10 +41,6 @@ module Ione
 
       before do
         codec.stub(:encode) { |msg, _| msg }
-      end
-
-      before do
-        logger.stub(:info)
       end
 
       describe '#port' do
@@ -182,7 +178,133 @@ module Ione
           raw_connection.should have_received(:write).with('42BAZFOO')
         end
 
-        it 'handles that the server fails to process the request'
+        context 'and there is an error' do
+          before do
+            codec.stub(:encode).with('BAZFOO', 42).and_return('42BAZFOO')
+          end
+
+          it 'calls #handle_error when #handle_request raises an error' do
+            server.override_handle_request { raise 'Borkzor' }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            server.errors.first.message.should == 'Borkzor'
+          end
+
+          it 'calls #handle_error when #handle_request returns a failed future' do
+            server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            server.errors.should == [StandardError.new('Borkzor')]
+          end
+
+          it 'calls #handle_error with the error, the request and the connection' do
+            error, request, connection = nil, nil, nil
+            server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+            server.override_handle_error { |e, r, c| error = e; request = r; connection = c }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            error.should be_a(StandardError)
+            error.message.should == 'Borkzor'
+            request.should == 'FOOBAZ'
+            connection.should == peer
+          end
+
+          it 'responds with the message returned by #handle_error' do
+            server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+            server.override_handle_error { |e| Ione::Future.resolved("OH NOES: #{e.message}") }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            raw_connection.should have_received(:write).with('OH NOES: Borkzor')
+          end
+
+          it 'does not respond at all by default' do
+            server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            raw_connection.should_not have_received(:write)
+          end
+
+          it 'does not respond when #handle_error raises an error' do
+            server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+            server.override_handle_error { |e| raise "OH NOES: #{e.message}" }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            raw_connection.should_not have_received(:write)
+          end
+
+          it 'does not respond when #handle_error returns a failed future' do
+            server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+            server.override_handle_error { |e| Ione::Future.failed(StandardError.new("OH NOES: #{e.message}")) }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            raw_connection.should_not have_received(:write)
+          end
+
+          it 'logs unhandled errors' do
+            server.override_handle_request { raise StandardError, 'Borkzor' }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            logger.should have_received(:error).with(/^Unhandled error: Borkzor \(StandardError\)/i)
+            logger.should have_received(:debug).with(/\d+:in/)
+          end
+
+          it 'logs when #handle_error raises an error' do
+            server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+            server.override_handle_error { |e| raise StandardError, "OH NOES: #{e.message}" }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            logger.should have_received(:error).with(/^Unhandled error: OH NOES: Borkzor \(StandardError\)/i)
+          end
+
+          it 'logs when #handle_error returns a failed future' do
+            server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+            server.override_handle_error { |e| Ione::Future.failed(StandardError.new("OH NOES: #{e.message}")) }
+            peer = server.connections.first
+            peer.handle_message('FOOBAZ', 42)
+            logger.should have_received(:error).with(/^Unhandled error: OH NOES: Borkzor \(StandardError\)/i)
+          end
+
+          context 'when the codec fails to encode the response' do
+            it 'calls #handle_error' do
+              server.override_handle_request { Ione::Future.resolved('OK') }
+              codec.stub(:encode).with('OK', 42).and_raise(CodecError.new('Borkzor'))
+              peer = server.connections.first
+              peer.handle_message('FOOBAZ', 42)
+              server.errors.first.should be_a(CodecError)
+              server.errors.first.message.should == 'Borkzor'
+            end
+
+            it 'responds with what #handle_error responds with' do
+              server.override_handle_request { Ione::Future.resolved('OK') }
+              server.override_handle_error { |e| Ione::Future.resolved("ERROR: #{e.message}") }
+              codec.stub(:encode).with('OK', 42).and_raise(CodecError.new('Borkzor'))
+              peer = server.connections.first
+              peer.handle_message('FOOBAZ', 42)
+              raw_connection.should have_received(:write).with('ERROR: Borkzor')
+            end
+
+            it 'does not respond when the codec cannot encode the response returned by #handle_error' do
+              server.override_handle_request { Ione::Future.resolved('OK') }
+              server.override_handle_error { |e| Ione::Future.resolved("ERROR: #{e.message}") }
+              codec.stub(:encode).with('OK', 42).and_raise(CodecError.new('Borkzor'))
+              codec.stub(:encode).with('ERROR: Borkzor', 42).and_raise(CodecError.new('Buzzfuzz'))
+              peer = server.connections.first
+              peer.handle_message('FOOBAZ', 42)
+              raw_connection.should_not have_received(:write)
+              server.errors.should have(1).item
+            end
+
+            it 'logs when the codec cannot encode the response returned by #handle_error' do
+              server.override_handle_request { Ione::Future.resolved('OK') }
+              server.override_handle_error { |e| Ione::Future.resolved("ERROR: #{e.message}") }
+              codec.stub(:encode).with('OK', 42).and_raise(CodecError.new('Borkzor'))
+              codec.stub(:encode).with('ERROR: Borkzor', 42).and_raise(CodecError.new('Buzzfuzz'))
+              peer = server.connections.first
+              peer.handle_message('FOOBAZ', 42)
+              logger.should have_received(:error).with(/^Unhandled error: Buzzfuzz \(Ione::Rpc::CodecError\)/i)
+            end
+          end
+        end
       end
     end
   end
@@ -190,20 +312,34 @@ end
 
 module ServerSpec
   class TestServer < Ione::Rpc::Server
-    attr_reader :connections, :received_messages
+    attr_reader :connections, :received_messages, :errors
 
     def initialize(*)
       super
       @connections = []
       @received_messages = []
+      @errors = []
     end
 
     def handle_connection(peer)
       @connections << peer
     end
 
+    def override_handle_error(&handler)
+      @error_handler = handler
+    end
+
     def override_handle_request(&handler)
       @request_handler = handler
+    end
+
+    def handle_error(error, request, connection)
+      @errors << error
+      if @error_handler
+        @error_handler.call(error, request, connection)
+      else
+        super
+      end
     end
 
     def handle_request(request, peer)
