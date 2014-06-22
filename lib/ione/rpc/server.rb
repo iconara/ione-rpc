@@ -41,8 +41,6 @@ module Ione
         @io_reactor.stop.map(self)
       end
 
-      protected
-
       # Override this method to do work when a new client connects.
       #
       # This method may be called concurrently.
