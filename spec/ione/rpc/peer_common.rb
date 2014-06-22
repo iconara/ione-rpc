@@ -66,6 +66,15 @@ shared_examples 'peers' do
       connection.data_listener.call('FOOBARBAZ')
       peer.messages.should have(3).items
     end
+
+    it 'closes the connection when there is an error decoding a frame' do
+      error = nil
+      peer.on_closed { |e| error = e }
+      codec.stub(:decode).with(Ione::ByteBuffer.new('FOOBARBAZ'), anything).and_raise(Ione::Rpc::CodecError.new('Bork'))
+      connection.data_listener.call('FOOBARBAZ')
+      error.should be_a(Ione::Rpc::CodecError)
+      error.message.should == 'Bork'
+    end
   end
 
   context 'when sending data' do
@@ -121,6 +130,10 @@ module RpcSpec
       @host = 'example.com'
       @port = 9999
       @written_bytes = ''
+    end
+
+    def close(cause=nil)
+      @closed_listener.call(cause) if @closed_listener
     end
 
     def write(bytes)

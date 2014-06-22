@@ -37,6 +37,8 @@ module Ione
           handle_message(@current_message, channel)
           @current_message = nil
         end
+      rescue => e
+        @connection.close(e)
       end
 
       def handle_message(message, channel)
