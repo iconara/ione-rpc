@@ -107,8 +107,9 @@ module Ione
 
       def setup_server
         @io_reactor.bind(@bind_address, @port, @queue_length) do |acceptor|
+          @acceptor = acceptor
           @logger.info('Server listening for connections on %s:%d' % [@bind_address, @port]) if @logger
-          acceptor.on_accept do |connection|
+          @acceptor.on_accept do |connection|
             @logger.info('Connection from %s:%d accepted' % [connection.host, connection.port]) if @logger
             peer = ServerPeer.new(connection, @codec, self, @logger)
             peer.on_closed do
