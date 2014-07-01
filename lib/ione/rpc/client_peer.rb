@@ -36,6 +36,7 @@ module Ione
       end
 
       def send_message(request, timeout=nil)
+        return Ione::Future.failed(Io::ConnectionClosedError.new('Connection closed')) if closed?
         promise = Ione::Promise.new
         channel = nil
         @lock.lock

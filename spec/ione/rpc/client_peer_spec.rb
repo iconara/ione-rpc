@@ -127,6 +127,12 @@ module Ione
           expect { f.value }.to_not raise_error
         end
 
+        it 'fails the request when the connection is closed' do
+          connection.stub(:closed?).and_return(true)
+          f = peer.send_message('foo', 2)
+          f.should be_failed
+        end
+
         context 'with a non-recoding codec' do
           let :codec do
             double(:codec, recoding?: false)

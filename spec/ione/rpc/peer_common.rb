@@ -139,10 +139,16 @@ module RpcSpec
       @host = 'example.com'
       @port = 9999
       @written_bytes = ''
+      @closed = false
+    end
+
+    def closed?
+      @closed
     end
 
     def close(cause=nil)
       @closed_listener.call(cause) if @closed_listener
+      @closed = true
     end
 
     def write(bytes)
