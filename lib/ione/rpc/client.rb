@@ -179,20 +179,22 @@ module Ione
       #   error response – that is protocol specific and up to the implementation
       #   to handle), or when there was no connection open.
       def send_request(request, connection=nil, timeout=nil)
-        unless connection
+        if connection
+          chosen_connection = connection
+        else
           @lock.lock
           begin
-            connection = choose_connection(@connections, request)
+            chosen_connection = choose_connection(@connections, request)
           ensure
             @lock.unlock
           end
         end
-        if connection
-          f = connection.send_message(request, timeout)
+        if chosen_connection
+          f = chosen_connection.send_message(request, timeout)
           f = f.fallback do |error|
             if error.is_a?(Io::ConnectionClosedError)
               @logger.warn('Request failed because the connection closed, retrying') if @logger
-              send_request(request)
+              send_request(request, connection, timeout)
             else
               raise error
             end
