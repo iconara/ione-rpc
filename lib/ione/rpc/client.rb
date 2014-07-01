@@ -326,7 +326,9 @@ module Ione
           @logger.info(message) if @logger
         end
         @lock.synchronize { @connections.delete(connection) }
-        connect(connection.host, connection.port) if error
+        if error && reconnect?(connection.host, connection.port, 0)
+          connect(connection.host, connection.port)
+        end
       end
 
       def normalize_address(host, port)
