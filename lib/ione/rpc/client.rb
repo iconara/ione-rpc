@@ -196,7 +196,7 @@ module Ione
               @logger.warn('Request failed because the connection closed, retrying') if @logger
               send_request(request, connection, timeout)
             else
-              raise error
+              Ione::Future.failed(error)
             end
           end
           f.on_failure do |error|
@@ -303,7 +303,7 @@ module Ione
             else
               @logger.info('Not reconnecting to %s:%d' % [host, port]) if @logger
               remove_host(host, port)
-              raise e
+              Ione::Future.failed(e)
             end
           end
           f.flat_map do |connection|
