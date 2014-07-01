@@ -252,6 +252,19 @@ module Ione
         connections.sample
       end
 
+      # Override this method to control if, and how many times, the client should
+      # attempt to reconnect on connection failures.
+      #
+      # You can, for example, stop reconnecting after a certain number of attempts.
+      #
+      # @param [String] host the host to connect to
+      # @param [Integer] port the port to connect to
+      # @param [Integer] attempts the number of attempts that have been made so
+      #   far – when 1 or above a connection attempt has just failed, when 0
+      #   an open connection was abruptly closed and the question is whether or
+      #   not to attempt to connect again.
+      # @return [Boolean] `true` if a connection attempt should be made, `false`
+      #   otherwise.
       def reconnect?(host, port, attempts)
         true
       end
