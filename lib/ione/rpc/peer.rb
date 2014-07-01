@@ -19,6 +19,10 @@ module Ione
         @current_message = nil
       end
 
+      def closed?
+        @connection.closed?
+      end
+
       def on_closed(&listener)
         @closed_promise.future.on_value(&listener)
       end

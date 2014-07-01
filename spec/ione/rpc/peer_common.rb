@@ -120,6 +120,15 @@ shared_examples 'peers' do
       connection.should have_received(:close)
     end
   end
+
+  describe '#closed?' do
+    it 'reflects the underlying connection\'s state' do
+      connection.stub(:closed?).and_return(true)
+      peer.should be_closed
+      connection.stub(:closed?).and_return(false)
+      peer.should_not be_closed
+    end
+  end
 end
 
 module RpcSpec
