@@ -131,9 +131,11 @@ module Ione
         ensure
           @lock.unlock
         end
-        error = Io::ConnectionClosedError.new('Connection closed')
+        message = 'Connection closed'
+        message << ": #{cause.message}" if cause
+        error = Io::ConnectionClosedError.new(message)
         in_flight_promises.each { |p| p.fail(error) }
-        error = RequestNotSentError.new('Connection closed')
+        error = RequestNotSentError.new(message)
         queued_promises.each { |p| p.fail(error) }
         super
       end

@@ -63,8 +63,14 @@ module Ione
           f1 = peer.send_message('hello')
           f2 = peer.send_message('world')
           connection.closed_listener.call
-          expect { f1.value }.to raise_error(Io::ConnectionClosedError)
-          expect { f2.value }.to raise_error(Io::ConnectionClosedError)
+          expect { f1.value }.to raise_error(Io::ConnectionClosedError, /connection closed/i)
+          expect { f2.value }.to raise_error(Io::ConnectionClosedError, /connection closed/i)
+        end
+
+        it 'includes the error message from the cause when there is one' do
+          f = peer.send_message('hello')
+          connection.closed_listener.call(StandardError.new('foo'))
+          expect { f.value }.to raise_error(Io::ConnectionClosedError, /connection closed: foo/i)
         end
 
         it 'fails queued requests' do
