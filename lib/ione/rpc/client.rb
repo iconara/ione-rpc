@@ -189,10 +189,10 @@ module Ione
             @lock.unlock
           end
         end
-        if chosen_connection
+        if chosen_connection && !chosen_connection.closed?
           f = chosen_connection.send_message(request, timeout)
           f = f.fallback do |error|
-            if error.is_a?(Io::ConnectionClosedError)
+            if error.is_a?(Rpc::ConnectionClosedError)
               @logger.warn('Request failed because the connection closed, retrying') if @logger
               send_request(request, connection, timeout)
             else
@@ -203,9 +203,10 @@ module Ione
             @logger.warn('Request failed: %s' % error.message) if @logger
           end
           f
+        elsif chosen_connection
+          Future.failed(Rpc::RequestNotSentError.new('Not connected'))
         else
-          @logger.warn('Could not send request: not connected') if @logger
-          Future.failed(Io::ConnectionError.new('Not connected'))
+          Future.failed(Rpc::NoConnectionError.new('No connection'))
         end
       rescue => e
         Future.failed(e)

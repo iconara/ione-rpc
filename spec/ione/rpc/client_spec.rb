@@ -215,7 +215,7 @@ module Ione
 
           it 'returns a failed future when called when not connected' do
             client.stop.value
-            expect { client.send_request('PING').value }.to raise_error(Io::ConnectionError)
+            expect { client.send_request('PING').value }.to raise_error(Rpc::NoConnectionError)
           end
         end
 
@@ -275,13 +275,24 @@ module Ione
             expect { f.value }.to raise_error('Bork')
           end
 
+          it 'fails the request when #choose_connection returns a closed connection' do
+            client.override_choose_connection do |connections, request|
+              c = connections.first
+              c.close
+              c
+            end
+            client.start.value
+            f = client.send_request('PING')
+            expect { f.value }.to raise_error(Rpc::RequestNotSentError)
+          end
+
           it 'fails the request when #choose_connection returns nil' do
             client.override_choose_connection do |connections, request|
               nil
             end
             client.start.value
             f = client.send_request('PING')
-            expect { f.value }.to raise_error(Io::ConnectionError)
+            expect { f.value }.to raise_error(Rpc::NoConnectionError)
           end
         end
       end
