@@ -6,7 +6,8 @@ require 'ione'
 module Ione
   module Rpc
     TimeoutError = Class.new(StandardError)
-    RequestNotSentError = Class.new(Io::ConnectionClosedError)
+    ConnectionClosedError = Io::ConnectionClosedError
+    RequestNotSentError = Class.new(ConnectionClosedError)
   end
 end
 
