@@ -70,7 +70,14 @@ module Ione
         it 'fails queued requests' do
           fs = Array.new(max_channels + 2) { peer.send_message('foo') }
           connection.closed_listener.call
-          fs.should be_all(&:failed?)
+          expect { fs[0].value }.to raise_error(Io::ConnectionClosedError)
+          expect { fs[max_channels].value }.to raise_error(Io::ConnectionClosedError)
+        end
+
+        it 'fails queued messages with an error that shows that the request was never sent' do
+          fs = Array.new(max_channels + 2) { peer.send_message('foo') }
+          connection.closed_listener.call
+          expect { fs[max_channels].value }.to raise_error(Rpc::RequestNotSentError)
         end
       end
 
@@ -136,7 +143,7 @@ module Ione
         it 'fails the request when the connection is closed' do
           connection.stub(:closed?).and_return(true)
           f = peer.send_message('foo', 2)
-          f.should be_failed
+          expect { f.value }.to raise_error(Rpc::RequestNotSentError)
         end
 
         context 'with a non-recoding codec' do

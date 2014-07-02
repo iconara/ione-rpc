@@ -53,7 +53,8 @@ module Ione
         connection.stub(:on_data)
         connection.stub(:on_closed)
         connection.stub(:write)
-        connection.stub(:close)
+        connection.stub(:close) { connection.stub(:closed?).and_return(true) }
+        connection.stub(:closed?).and_return(false)
         connection
       end
 

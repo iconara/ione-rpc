@@ -36,7 +36,9 @@ module Ione
       end
 
       def send_message(request, timeout=nil)
-        return Ione::Future.failed(Io::ConnectionClosedError.new('Connection closed')) if closed?
+        if closed?
+          return Ione::Future.failed(Rpc::RequestNotSentError.new('Connection closed'))
+        end
         promise = Ione::Promise.new
         channel = nil
         @lock.lock
@@ -118,17 +120,21 @@ module Ione
       end
 
       def handle_closed(cause=nil)
-        error = Io::ConnectionClosedError.new('Connection closed')
-        promises_to_fail = []
+        in_flight_promises = nil
+        queued_promises = nil
         @lock.lock
         begin
-          promises_to_fail.concat(@channels.reject(&:nil?))
-          promises_to_fail.concat(@queue.map(&:last))
+          in_flight_promises = @channels.reject(&:nil?)
+          @channels = [nil] * @channels.size
+          queued_promises = @queue.map(&:last)
           @queue = []
         ensure
           @lock.unlock
         end
-        promises_to_fail.each { |p| p.fail(error) }
+        error = Io::ConnectionClosedError.new('Connection closed')
+        in_flight_promises.each { |p| p.fail(error) }
+        error = RequestNotSentError.new('Connection closed')
+        queued_promises.each { |p| p.fail(error) }
         super
       end
     end
