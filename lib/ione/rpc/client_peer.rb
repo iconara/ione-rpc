@@ -119,7 +119,15 @@ module Ione
 
       def handle_closed(cause=nil)
         error = Io::ConnectionClosedError.new('Connection closed')
-        promises_to_fail = @lock.synchronize { @channels.reject(&:nil?) }
+        promises_to_fail = []
+        @lock.lock
+        begin
+          promises_to_fail.concat(@channels.reject(&:nil?))
+          promises_to_fail.concat(@queue.map(&:last))
+          @queue = []
+        ensure
+          @lock.unlock
+        end
         promises_to_fail.each { |p| p.fail(error) }
         super
       end

@@ -59,12 +59,18 @@ module Ione
       include_examples 'peers'
 
       context 'when the connection closes' do
-        it 'fails all outstanding requests when closing' do
+        it 'fails all in-flight requests' do
           f1 = peer.send_message('hello')
           f2 = peer.send_message('world')
           connection.closed_listener.call
           expect { f1.value }.to raise_error(Io::ConnectionClosedError)
           expect { f2.value }.to raise_error(Io::ConnectionClosedError)
+        end
+
+        it 'fails queued requests' do
+          fs = Array.new(max_channels + 2) { peer.send_message('foo') }
+          connection.closed_listener.call
+          fs.should be_all(&:failed?)
         end
       end
 
