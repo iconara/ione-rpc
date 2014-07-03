@@ -522,6 +522,14 @@ module Ione
           connection_attempts_by_host['node1.example.com'].should == 10
           connection_attempts_by_host['node2.example.com'].should == 1
         end
+
+        it 'allows the connection to be manually reconnected' do
+          client.start.value
+          c1 = client.created_connections.find { |c| c.host == 'node1.example.com' }
+          c1.closed_listener.call
+          client.add_host(c1.host, c1.port).value
+          io_reactor.should have_received(:connect).with('node1.example.com', anything, anything).twice
+        end
       end
 
       context 'with multiple connections' do

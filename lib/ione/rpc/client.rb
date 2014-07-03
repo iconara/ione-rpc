@@ -344,6 +344,8 @@ module Ione
         @lock.synchronize { @connections.delete(connection) }
         if error && reconnect?(connection.host, connection.port, 0)
           connect(connection.host, connection.port)
+        else
+          remove_host(connection.host, connection.port)
         end
       end
 
