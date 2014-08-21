@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    ione-rpc (1.0.0.pre4)
+    ione-rpc (1.0.0)
       ione (~> 1)
 
 GEM
@@ -42,6 +42,7 @@ GEM
     yard (0.8.7.4)
 
 PLATFORMS
+  java
   ruby
 
 DEPENDENCIES
