@@ -10,11 +10,16 @@ Ione RPC is a framework for writing server and client components for your Ruby a
 
 # Installing
 
-There is currently no gem release of Ione RPC, but you can install it from git with Bundler:
+Ione RPC is available from [Rubygems][https://rubygems.org] and can be installed with the `gem` command:
+
+```
+$ gem install ione-rpc
+```
+
+but more commonly you will add it to your `Gemfile`:
 
 ```ruby
-# in Gemfile
-gem 'ione-rpc', github: 'iconara/ione-rpc'
+gem 'ione-rpc'
 ```
 
 # Example
