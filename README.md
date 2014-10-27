@@ -145,7 +145,7 @@ class TranslationClient < Ione::Rpc::Client
 end
 ```
 
-If you read the part above about how the client randomly selected which server to talk to and though that that wasn't very useful, there's a way to override that, just implement `#choose_connection`:
+If you read the part above about how the client randomly selected which server to talk to and thought that that wasn't very useful, there's a way to override that, just implement `#choose_connection`:
 
 ```ruby
 class TranslationClient < Ione::Rpc::Client
