@@ -133,9 +133,9 @@ module Ione
           else
             message = decode_body(state, body)
           end
-          return message, state.channel, true
+          [message, state.channel, true]
         else
-          return state, nil, false
+          [state, nil, false]
         end
       end
 
