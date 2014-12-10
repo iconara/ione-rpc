@@ -141,14 +141,18 @@ module Ione
       #   client (immediately, this is mostly to be consistent with #add_host)
       def remove_host(hostname, port=nil)
         hostname, port = normalize_address(hostname, port)
+        connection = nil
         @lock.synchronize do
           index = @hosts.index { |h, p, _| h == hostname && p == port }
           if index
             @hosts.delete_at(index)
-            if (connection = @connections.find { |c| c.host == hostname && c.port == port })
-              connection.close
+            if (conn = @connections.find { |c| c.host == hostname && c.port == port })
+              connection = conn
             end
           end
+        end
+        if connection
+          connection.close
         end
         Future.resolved(self)
       end
