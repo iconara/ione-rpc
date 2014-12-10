@@ -53,6 +53,9 @@ module Ione
           timer_promises << Promise.new
           timer_promises.last.future
         end
+        scheduler.stub(:cancel_timer) do |timer|
+          timer_promises.delete(timer)
+        end
         scheduler.stub(:timer_promises).and_return(timer_promises)
       end
 

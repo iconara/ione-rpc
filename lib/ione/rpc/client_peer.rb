@@ -39,7 +39,7 @@ module Ione
         if closed?
           return Ione::Future.failed(Rpc::RequestNotSentError.new('Connection closed'))
         end
-        promise = Ione::Promise.new
+        promise = RequestPromise.new
         channel = nil
         @lock.lock
         begin
@@ -60,18 +60,21 @@ module Ione
           end
         end
         if timeout
-          @scheduler.schedule_timer(timeout).on_value do
-            unless promise.future.completed?
-              error = Rpc::TimeoutError.new('No response received within %ss' % timeout.to_s)
-              promise.fail(error)
-              @timeouts += 1
-            end
+          promise.timeout_future = @scheduler.schedule_timer(timeout)
+          promise.timeout_future.on_value do
+            error = Rpc::TimeoutError.new('No response received within %ss' % timeout.to_s)
+            promise.fail(error)
+            @timeouts += 1
           end
         end
         promise.future
       end
 
       private
+
+      class RequestPromise < Promise
+        attr_accessor :timeout_future
+      end
 
       def handle_message(response, channel)
         promise = nil
@@ -85,6 +88,7 @@ module Ione
         end
         if promise && !promise.future.completed?
           promise.fulfill(response)
+          @scheduler.cancel_timer(promise.timeout_future)
         end
         flush_queue
       end
