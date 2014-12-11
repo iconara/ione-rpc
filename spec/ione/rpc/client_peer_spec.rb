@@ -149,6 +149,13 @@ module Ione
           expect { f.value }.to_not raise_error
         end
 
+        it 'cancel the timeout timer when the response is received before the timeout passes' do
+          f = peer.send_message('foo', 2)
+          connection.data_listener.call('bar@000')
+          scheduler.timer_promises.first.fulfill
+          scheduler.should have_received(:cancel_timer).once
+        end
+
         it 'fails the request when the connection is closed' do
           connection.stub(:closed?).and_return(true)
           f = peer.send_message('foo', 2)
