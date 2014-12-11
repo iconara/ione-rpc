@@ -88,7 +88,7 @@ module Ione
         end
         if promise && !promise.future.completed?
           promise.fulfill(response)
-          @scheduler.cancel_timer(promise.timeout_future)
+          @scheduler.cancel_timer(promise.timeout_future) if promise.timeout_future
         end
         flush_queue
       end
