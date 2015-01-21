@@ -19,7 +19,7 @@ Gem::Specification.new do |s|
   s.test_files    = Dir['spec/**/*.rb']
   s.require_paths = %w(lib)
 
-  s.add_dependency 'ione', '~> 1'
+  s.add_runtime_dependency 'ione', '~> 1', '>= 1.2'
 
   s.platform = Gem::Platform::RUBY
   s.required_ruby_version = '>= 1.9.3'
