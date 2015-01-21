@@ -53,6 +53,9 @@ module Ione
           timer_promises << Promise.new
           timer_promises.last.future
         end
+        scheduler.stub(:cancel_timer) do |timer|
+          timer_promises.delete(timer)
+        end
         scheduler.stub(:timer_promises).and_return(timer_promises)
       end
 
@@ -144,6 +147,13 @@ module Ione
           connection.data_listener.call('bar@000')
           scheduler.timer_promises.first.fulfill
           expect { f.value }.to_not raise_error
+        end
+
+        it 'cancel the timeout timer when the response is received before the timeout passes' do
+          f = peer.send_message('foo', 2)
+          connection.data_listener.call('bar@000')
+          scheduler.timer_promises.first.fulfill
+          scheduler.should have_received(:cancel_timer).once
         end
 
         it 'fails the request when the connection is closed' do
