@@ -202,16 +202,16 @@ module Ione
             server.errors.should == [StandardError.new('Borkzor')]
           end
 
-          it 'calls #handle_error with the error, the request, no previous response, and the connection' do
-            error, request, previous_response, connection = nil, nil, nil, nil
+          it 'calls #handle_error with the error, the request, no response, and the connection' do
+            error, request, response, connection = nil, nil, nil, nil
             server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
-            server.override_handle_error { |e, r, p, c| error = e; request = r; previous_response = p; connection = c }
+            server.override_handle_error { |e, q, r, c| error = e; request = q; response = r; connection = c }
             peer = server.connections.first
             peer.handle_message('FOOBAZ', 42)
             error.should be_a(StandardError)
             error.message.should eq('Borkzor')
             request.should eq('FOOBAZ')
-            previous_response.should be_nil
+            response.should be_nil
             connection.should equal(peer)
           end
 
@@ -280,17 +280,17 @@ module Ione
               server.errors.first.message.should == 'Borkzor'
             end
 
-            it 'calls #handle_error with the error, the request, the previous response, and the connection' do
-              error, request, previous_response, connection = nil, nil, nil, nil
+            it 'calls #handle_error with the error, the request, the response, and the connection' do
+              error, request, response, connection = nil, nil, nil, nil
               server.override_handle_request { Ione::Future.resolved('OK') }
-              server.override_handle_error { |e, r, p, c| error = e; request = r; previous_response = p; connection = c }
+              server.override_handle_error { |e, q, r, c| error = e; request = q; response = r; connection = c }
               codec.stub(:encode).with('OK', 42).and_raise(CodecError.new('Borkzor'))
               peer = server.connections.first
               peer.handle_message('FOOBAZ', 42)
               error.should be_a(CodecError)
               error.message.should eq('Borkzor')
               request.should eq('FOOBAZ')
-              previous_response.should eq('OK')
+              response.should eq('OK')
               connection.should equal(peer)
             end
 
@@ -331,15 +331,15 @@ module Ione
             end
 
             it 'calls #handle_error with the error, the request and the connection for legacy servers' do
-              error, request, previous_response, connection = nil, nil, nil, nil
+              error, request, response, connection = nil, nil, nil, nil
               server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
-              server.override_handle_error { |e, r, p, c| error = e; request = r; previous_response = p; connection = c }
+              server.override_handle_error { |e, q, r, c| error = e; request = q; response = r; connection = c }
               peer = server.connections.first
               peer.handle_message('FOOBAZ', 42)
               error.should be_a(StandardError)
               error.message.should eq('Borkzor')
               request.should eq('FOOBAZ')
-              previous_response.should eq(:legacy)
+              response.should eq(:legacy)
               connection.should equal(peer)
             end
           end
@@ -372,10 +372,10 @@ module ServerSpec
       @request_handler = handler
     end
 
-    def handle_error(error, request, previous_response, connection)
+    def handle_error(error, request, response, connection)
       @errors << error
       if @error_handler
-        @error_handler.call(error, request, previous_response, connection)
+        @error_handler.call(error, request, response, connection)
       else
         super
       end

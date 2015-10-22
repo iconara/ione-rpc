@@ -53,8 +53,8 @@ module Ione
       # Override this method to handle errors raised or returned by
       # {#handle_request} or any other part of the request handling (for example
       # the response encoding). In the event that {#handle_request} completed
-      # successfully, # the previous response will contain that result, otherwise
-      # it will be nil.
+      # successfully, the response will contain that result, otherwise it will
+      # be nil.
       #
       # When this method raises an error or returns a failed future there will be
       # no response for the request. Unless you use a custom client this means
@@ -68,11 +68,11 @@ module Ione
       # at the `debug` level.
       #
       # To remain backwards compatible, the method can be overridden to take only
-      # three arguments, in which case the previous response is omitted.
+      # three arguments, in which case the response is omitted.
       #
       # @return [Ione::Future<Object>] a future that will resolve to an alternate
       #   response for this request.
-      def handle_error(error, request, previous_response=nil, connection)
+      def handle_error(error, request, response=nil, connection)
         Ione::Future.failed(error)
       end
 
@@ -95,11 +95,11 @@ module Ione
       end
 
       # @private
-      def guarded_handle_error(error, request, previous_response, connection)
+      def guarded_handle_error(error, request, response, connection)
         if method(:handle_error).arity == 3
           handle_error(error, request, connection)
         else
-          handle_error(error, request, previous_response, connection)
+          handle_error(error, request, response, connection)
         end
       rescue => e
         Ione::Future.failed(e)
