@@ -141,6 +141,11 @@ module Ione
           raw_connection.closed_listener.call
           logger.should have_received(:info).with('Connection from client.example.com:34534 closed')
         end
+
+        it 'logs when the client is disconnected unexpectedly' do
+          raw_connection.closed_listener.call(IOError.new('Boork'))
+          logger.should have_received(:warn).with('Connection from client.example.com:34534 closed unexpectedly: Boork (IOError)')
+        end
       end
 
       context 'when a client sends a request' do

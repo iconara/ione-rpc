@@ -112,8 +112,14 @@ module Ione
           @acceptor.on_accept do |connection|
             @logger.info('Connection from %s:%d accepted' % [connection.host, connection.port]) if @logger
             peer = ServerPeer.new(connection, @codec, self, @logger)
-            peer.on_closed do
-              @logger.info('Connection from %s:%d closed' % [connection.host, connection.port]) if @logger
+            if @logger
+              peer.on_closed do |error|
+                if error
+                  @logger.warn(sprintf('Connection from %s:%d closed unexpectedly: %s (%s)', connection.host, connection.port, error.message, error.class.name))
+                else
+                  @logger.info(sprintf('Connection from %s:%d closed', connection.host, connection.port))
+                end
+              end
             end
             handle_connection(peer)
           end
