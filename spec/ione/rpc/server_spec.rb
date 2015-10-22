@@ -249,7 +249,7 @@ module Ione
             server.override_handle_request { raise StandardError, 'Borkzor' }
             peer = server.connections.first
             peer.handle_message('FOOBAZ', 42)
-            logger.should have_received(:error).with(/^Unhandled error: Borkzor \(StandardError\)/i)
+            logger.should have_received(:error).with(/^Unhandled error for client.example.com:34534; Borkzor \(StandardError\)/i)
             logger.should have_received(:debug).with(/\d+:in/)
           end
 
@@ -258,7 +258,7 @@ module Ione
             server.override_handle_error { |e| raise StandardError, "OH NOES: #{e.message}" }
             peer = server.connections.first
             peer.handle_message('FOOBAZ', 42)
-            logger.should have_received(:error).with(/^Unhandled error: OH NOES: Borkzor \(StandardError\)/i)
+            logger.should have_received(:error).with(/^Unhandled error for client.example.com:34534; OH NOES: Borkzor \(StandardError\)/i)
           end
 
           it 'logs when #handle_error returns a failed future' do
@@ -266,7 +266,7 @@ module Ione
             server.override_handle_error { |e| Ione::Future.failed(StandardError.new("OH NOES: #{e.message}")) }
             peer = server.connections.first
             peer.handle_message('FOOBAZ', 42)
-            logger.should have_received(:error).with(/^Unhandled error: OH NOES: Borkzor \(StandardError\)/i)
+            logger.should have_received(:error).with(/^Unhandled error for client.example.com:34534; OH NOES: Borkzor \(StandardError\)/i)
           end
 
           context 'when the codec fails to encode the response' do
@@ -306,7 +306,7 @@ module Ione
               codec.stub(:encode).with('ERROR: Borkzor', 42).and_raise(CodecError.new('Buzzfuzz'))
               peer = server.connections.first
               peer.handle_message('FOOBAZ', 42)
-              logger.should have_received(:error).with(/^Unhandled error: Buzzfuzz \(Ione::Rpc::CodecError\)/i)
+              logger.should have_received(:error).with(/^Unhandled error for client.example.com:34534; Buzzfuzz \(Ione::Rpc::CodecError\)/i)
             end
           end
         end

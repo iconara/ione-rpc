@@ -149,8 +149,8 @@ module Ione
             if try_again
               ff = @server.guarded_handle_error(error, message, self)
               send_response(ff, message, channel, false)
-            else
-              @logger.error('Unhandled error: %s (%s)' % [error.message, error.class.name])
+            elsif @logger
+              @logger.error(sprintf('Unhandled error for %s:%d; %s (%s)', @connection.host, @connection.port, error.message, error.class.name))
               error.backtrace && @logger.debug(error.backtrace.join("#{$/}\t"))
             end
           end
