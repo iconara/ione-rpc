@@ -145,7 +145,7 @@ module Ione
             @connection.write(encoded_response)
             nil
           end
-          f.fallback do |error|
+          f.on_failure do |error|
             if try_again
               ff = @server.guarded_handle_error(error, message, self)
               send_response(ff, message, channel, false)
