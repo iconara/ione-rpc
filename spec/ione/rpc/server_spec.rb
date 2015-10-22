@@ -202,16 +202,17 @@ module Ione
             server.errors.should == [StandardError.new('Borkzor')]
           end
 
-          it 'calls #handle_error with the error, the request and the connection' do
-            error, request, connection = nil, nil, nil
+          it 'calls #handle_error with the error, the request, no previous response, and the connection' do
+            error, request, previous_response, connection = nil, nil, nil, nil
             server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
-            server.override_handle_error { |e, r, c| error = e; request = r; connection = c }
+            server.override_handle_error { |e, r, p, c| error = e; request = r; previous_response = p; connection = c }
             peer = server.connections.first
             peer.handle_message('FOOBAZ', 42)
             error.should be_a(StandardError)
-            error.message.should == 'Borkzor'
-            request.should == 'FOOBAZ'
-            connection.should == peer
+            error.message.should eq('Borkzor')
+            request.should eq('FOOBAZ')
+            previous_response.should be_nil
+            connection.should equal(peer)
           end
 
           it 'responds with the message returned by #handle_error' do
@@ -279,6 +280,20 @@ module Ione
               server.errors.first.message.should == 'Borkzor'
             end
 
+            it 'calls #handle_error with the error, the request, the previous response, and the connection' do
+              error, request, previous_response, connection = nil, nil, nil, nil
+              server.override_handle_request { Ione::Future.resolved('OK') }
+              server.override_handle_error { |e, r, p, c| error = e; request = r; previous_response = p; connection = c }
+              codec.stub(:encode).with('OK', 42).and_raise(CodecError.new('Borkzor'))
+              peer = server.connections.first
+              peer.handle_message('FOOBAZ', 42)
+              error.should be_a(CodecError)
+              error.message.should eq('Borkzor')
+              request.should eq('FOOBAZ')
+              previous_response.should eq('OK')
+              connection.should equal(peer)
+            end
+
             it 'responds with what #handle_error responds with' do
               server.override_handle_request { Ione::Future.resolved('OK') }
               server.override_handle_error { |e| Ione::Future.resolved("ERROR: #{e.message}") }
@@ -307,6 +322,25 @@ module Ione
               peer = server.connections.first
               peer.handle_message('FOOBAZ', 42)
               logger.should have_received(:error).with(/^Unhandled error for client.example.com:34534; Buzzfuzz \(Ione::Rpc::CodecError\)/i)
+            end
+          end
+
+          context 'with a legacy server subclass' do
+            let :server do
+              ServerSpec::LegacyTestServer.new(4321, codec, io_reactor: io_reactor, logger: logger)
+            end
+
+            it 'calls #handle_error with the error, the request and the connection for legacy servers' do
+              error, request, previous_response, connection = nil, nil, nil, nil
+              server.override_handle_request { Ione::Future.failed(StandardError.new('Borkzor')) }
+              server.override_handle_error { |e, r, p, c| error = e; request = r; previous_response = p; connection = c }
+              peer = server.connections.first
+              peer.handle_message('FOOBAZ', 42)
+              error.should be_a(StandardError)
+              error.message.should eq('Borkzor')
+              request.should eq('FOOBAZ')
+              previous_response.should eq(:legacy)
+              connection.should equal(peer)
             end
           end
         end
@@ -338,10 +372,10 @@ module ServerSpec
       @request_handler = handler
     end
 
-    def handle_error(error, request, connection)
+    def handle_error(error, request, previous_response, connection)
       @errors << error
       if @error_handler
-        @error_handler.call(error, request, connection)
+        @error_handler.call(error, request, previous_response, connection)
       else
         super
       end
@@ -354,6 +388,12 @@ module ServerSpec
       else
         super
       end
+    end
+  end
+
+  class LegacyTestServer < TestServer
+    def handle_error(error, request, connection)
+      super(error, request, :legacy, connection)
     end
   end
 end

@@ -52,7 +52,9 @@ module Ione
 
       # Override this method to handle errors raised or returned by
       # {#handle_request} or any other part of the request handling (for example
-      # the response encoding).
+      # the response encoding). In the event that {#handle_request} completed
+      # successfully, # the previous response will contain that result, otherwise
+      # it will be nil.
       #
       # When this method raises an error or returns a failed future there will be
       # no response for the request. Unless you use a custom client this means
@@ -65,9 +67,12 @@ module Ione
       # with the error message and class. The full backtrace will also be logged
       # at the `debug` level.
       #
+      # To remain backwards compatible, the method can be overridden to take only
+      # three arguments, in which case the previous response is omitted.
+      #
       # @return [Ione::Future<Object>] a future that will resolve to an alternate
       #   response for this request.
-      def handle_error(error, request, connection)
+      def handle_error(error, request, previous_response=nil, connection)
         Ione::Future.failed(error)
       end
 
@@ -90,8 +95,12 @@ module Ione
       end
 
       # @private
-      def guarded_handle_error(error, request, connection)
-        handle_error(error, request, connection)
+      def guarded_handle_error(error, request, previous_response, connection)
+        if method(:handle_error).arity == 3
+          handle_error(error, request, connection)
+        else
+          handle_error(error, request, previous_response, connection)
+        end
       rescue => e
         Ione::Future.failed(e)
       end
@@ -140,14 +149,16 @@ module Ione
         end
 
         def send_response(f, message, channel, try_again)
-          f = f.map do |response|
+          response = nil
+          f = f.map do |r|
+            response = r
             encoded_response = @codec.encode(response, channel)
             @connection.write(encoded_response)
             nil
           end
           f.on_failure do |error|
             if try_again
-              ff = @server.guarded_handle_error(error, message, self)
+              ff = @server.guarded_handle_error(error, message, response, self)
               send_response(ff, message, channel, false)
             elsif @logger
               @logger.error(sprintf('Unhandled error for %s:%d; %s (%s)', @connection.host, @connection.port, error.message, error.class.name))
