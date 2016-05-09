@@ -12,6 +12,7 @@ module Ione
         super(connection, codec, scheduler)
         @lock = Mutex.new
         @channels = [nil] * max_channels
+        @free_channels = (0...max_channels).to_a
         @queue = []
         @encode_eagerly = @codec.recoding?
         @sent_messages = 0
@@ -25,7 +26,7 @@ module Ione
           :host => @host,
           :port => @port,
           :max_channels => @channels.size,
-          :active_channels => @channels.size - @channels.count(nil),
+          :active_channels => @channels.size - @free_channels.size,
           :queued_messages => @queue.size,
           :sent_messages => @sent_messages,
           :received_responses => @received_responses,
@@ -82,6 +83,7 @@ module Ione
         begin
           promise = @channels[channel]
           @channels[channel] = nil
+          @free_channels << channel
           @received_responses += 1 if promise
         ensure
           @lock.unlock
@@ -117,7 +119,7 @@ module Ione
       end
 
       def take_channel(promise)
-        if (channel = @channels.index(nil))
+        if (channel = @free_channels.pop)
           @channels[channel] = promise
           channel
         end
@@ -130,6 +132,7 @@ module Ione
         begin
           in_flight_promises = @channels.reject(&:nil?)
           @channels = [nil] * @channels.size
+          @free_channels = (0...@channels.size).to_a
           queued_promises = @queue.map(&:last)
           @queue = []
         ensure
