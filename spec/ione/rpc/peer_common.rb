@@ -86,8 +86,8 @@ shared_examples 'peers' do
 
     it 'writes the encoded frame to the connection' do
       peer.send_message('FUZZBAZZ')
-      codec.should have_received(:encode).with('FUZZBAZZ', 0)
-      connection.written_bytes.should == 'FUZZBAZZ@0'
+      codec.should have_received(:encode).with('FUZZBAZZ', kind_of(Fixnum))
+      connection.written_bytes.should match(/\AFUZZBAZZ@\d+\Z/)
     end
   end
 
