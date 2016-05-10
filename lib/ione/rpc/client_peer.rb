@@ -11,13 +11,11 @@ module Ione
         raise ArgumentError, 'More than 2**15 channels is not supported' if max_channels > 2**15
         super(connection, codec, scheduler)
         @lock = Mutex.new
-        @channels = [nil] * max_channels
-        @free_channels = (0...max_channels).to_a
-        @queue = []
         @encode_eagerly = @codec.recoding?
         @sent_messages = 0
         @received_responses = 0
         @timeouts = 0
+        reset(max_channels)
       end
 
       def stats
@@ -130,11 +128,9 @@ module Ione
         queued_promises = nil
         @lock.lock
         begin
-          in_flight_promises = @channels.reject(&:nil?)
-          @channels = [nil] * @channels.size
-          @free_channels = (0...@channels.size).to_a
+          in_flight_promises = @channels.compact
           queued_promises = @queue.map(&:last)
-          @queue = []
+          reset(@channels.size)
         ensure
           @lock.unlock
         end
@@ -145,6 +141,12 @@ module Ione
         error = RequestNotSentError.new(message)
         queued_promises.each { |p| p.fail(error) }
         super
+      end
+
+      def reset(max_channels)
+        @channels = [nil] * max_channels
+        @free_channels = (0...max_channels).to_a
+        @queue = []
       end
     end
   end
