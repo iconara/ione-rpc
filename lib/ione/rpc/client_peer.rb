@@ -11,12 +11,11 @@ module Ione
         raise ArgumentError, 'More than 2**15 channels is not supported' if max_channels > 2**15
         super(connection, codec, scheduler)
         @lock = Mutex.new
-        @channels = [nil] * max_channels
-        @queue = []
         @encode_eagerly = @codec.recoding?
         @sent_messages = 0
         @received_responses = 0
         @timeouts = 0
+        reset(max_channels)
       end
 
       def stats
@@ -25,7 +24,7 @@ module Ione
           :host => @host,
           :port => @port,
           :max_channels => @channels.size,
-          :active_channels => @channels.size - @channels.count(nil),
+          :active_channels => @channels.size - @free_channels.size,
           :queued_messages => @queue.size,
           :sent_messages => @sent_messages,
           :received_responses => @received_responses,
@@ -82,6 +81,7 @@ module Ione
         begin
           promise = @channels[channel]
           @channels[channel] = nil
+          @free_channels << channel
           @received_responses += 1 if promise
         ensure
           @lock.unlock
@@ -117,7 +117,7 @@ module Ione
       end
 
       def take_channel(promise)
-        if (channel = @channels.index(nil))
+        if (channel = @free_channels.pop)
           @channels[channel] = promise
           channel
         end
@@ -128,10 +128,9 @@ module Ione
         queued_promises = nil
         @lock.lock
         begin
-          in_flight_promises = @channels.reject(&:nil?)
-          @channels = [nil] * @channels.size
+          in_flight_promises = @channels.compact
           queued_promises = @queue.map(&:last)
-          @queue = []
+          reset(@channels.size)
         ensure
           @lock.unlock
         end
@@ -142,6 +141,12 @@ module Ione
         error = RequestNotSentError.new(message)
         queued_promises.each { |p| p.fail(error) }
         super
+      end
+
+      def reset(max_channels)
+        @channels = [nil] * max_channels
+        @free_channels = (0...max_channels).to_a
+        @queue = []
       end
     end
   end

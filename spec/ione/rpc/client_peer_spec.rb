@@ -104,10 +104,15 @@ module Ione
 
         it 'uses the next available channel' do
           peer.send_message('hello')
+          hello_channel = connection.written_bytes.rpartition('@').last
           peer.send_message('foo')
-          connection.data_listener.call('world@0')
+          foo_channel = connection.written_bytes.rpartition('@').last
+          foo_channel.should_not eq(hello_channel)
+
+          connection.data_listener.call('world@' << hello_channel)
           peer.send_message('bar')
-          connection.written_bytes.should == 'hello@000foo@001bar@000'
+          bar_channel = connection.written_bytes.rpartition('@').last
+          bar_channel.should eq(hello_channel)
         end
 
         it 'queues requests when all channels are in use' do
@@ -131,8 +136,9 @@ module Ione
 
         it 'returns a future that resolves to the response' do
           f = peer.send_message('foo')
+          foo_channel = connection.written_bytes.rpartition('@').last
           f.should_not be_resolved
-          connection.data_listener.call('bar@000')
+          connection.data_listener.call('bar@' << foo_channel)
           f.value.payload.should == 'bar'
         end
 
@@ -144,14 +150,16 @@ module Ione
 
         it 'does not fail the request when the response is received before the timeout passes' do
           f = peer.send_message('foo', 2)
-          connection.data_listener.call('bar@000')
+          foo_channel = connection.written_bytes.rpartition('@').last
+          connection.data_listener.call('bar@' << foo_channel)
           scheduler.timer_promises.first.fulfill
           expect { f.value }.to_not raise_error
         end
 
         it 'cancel the timeout timer when the response is received before the timeout passes' do
           f = peer.send_message('foo', 2)
-          connection.data_listener.call('bar@000')
+          foo_channel = connection.written_bytes.rpartition('@').last
+          connection.data_listener.call('bar@' << foo_channel)
           scheduler.timer_promises.first.fulfill
           scheduler.should have_received(:cancel_timer).once
         end

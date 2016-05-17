@@ -42,16 +42,20 @@ module Ione
         @max_channels = options[:max_channels] || 128
         @logger = options[:logger]
         @hosts = []
-        @connections = []
+        @connections = [].freeze
         Array(options[:hosts]).each { |h| add_host(*h) }
       end
 
       # A client is connected when it has at least one open connection.
       def connected?
+        connections = nil
         @lock.lock
-        @connections.any?
-      ensure
-        @lock.unlock
+        begin
+          connections = @connections
+        ensure
+          @lock.unlock
+        end
+        connections.any?
       end
 
       # Returns an array of info and statistics about the currently open connections.
@@ -99,7 +103,7 @@ module Ione
       # @return [Ione::Future<Ione::Rpc::Client>] a future that resolves to the
       #   client when all connections have closed and the IO reactor has stopped.
       def stop
-        @lock.synchronize { @connections = [] }
+        @lock.synchronize { @connections = [].freeze }
         @io_reactor.stop.map(self)
       end
 
@@ -186,12 +190,14 @@ module Ione
         if connection
           chosen_connection = connection
         else
+          connections = nil
           @lock.lock
           begin
-            chosen_connection = choose_connection(@connections, request)
+            connections = @connections
           ensure
             @lock.unlock
           end
+          chosen_connection = choose_connection(connections, request)
         end
         if chosen_connection && !chosen_connection.closed?
           f = chosen_connection.send_message(request, timeout)
@@ -327,7 +333,7 @@ module Ione
         @logger.info('Connected to %s:%d' % [connection.host, connection.port]) if @logger
         connection.on_closed { |error| handle_disconnected(connection, error) }
         if connect?(connection.host, connection.port)
-          @lock.synchronize { @connections << connection }
+          @lock.synchronize { @connections = (@connections + [connection]).freeze }
         else
           connection.close
         end
@@ -345,7 +351,7 @@ module Ione
         else
           @logger.info(message) if @logger
         end
-        @lock.synchronize { @connections.delete(connection) }
+        @lock.synchronize { @connections = (@connections - [connection]).freeze }
         if error && reconnect?(connection.host, connection.port, 0)
           connect(connection.host, connection.port)
         else
